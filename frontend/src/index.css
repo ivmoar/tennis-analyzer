@@ -1,0 +1,112 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --green:      #1D9E75;
+  --green-light:#E1F5EE;
+  --blue:       #378ADD;
+  --blue-light: #E6F1FB;
+  --amber:      #EF9F27;
+  --amber-light:#FAEEDA;
+  --red:        #E24B4A;
+  --red-light:  #FCEBEB;
+  --gray-100:   #f5f5f4;
+  --gray-200:   #e5e5e3;
+  --gray-400:   #a3a39c;
+  --gray-600:   #5f5e5a;
+  --gray-900:   #1a1a18;
+  --radius:     12px;
+  --radius-sm:  8px;
+  --shadow:     0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.08);
+}
+
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--gray-100);
+  color: var(--gray-900);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+h1 { font-size: 1.75rem; font-weight: 700; }
+h2 { font-size: 1.25rem; font-weight: 600; }
+h3 { font-size: 1rem;    font-weight: 600; }
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s, transform 0.1s;
+}
+button:hover  { opacity: 0.88; }
+button:active { transform: scale(0.98); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Responsive layout ─────────────────────────────────────── */
+.page-results {
+  min-height: 100vh;
+  background: var(--gray-100);
+  padding: 1.5rem;
+}
+
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1100px;
+  margin: 0 auto 1.5rem;
+}
+
+.results-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1rem;
+}
+
+.page-upload {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  gap: 2rem;
+}
+
+.upload-steps {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  max-width: 560px;
+}
+
+@media (max-width: 700px) {
+  .page-results {
+    padding: 1rem 0.75rem;
+  }
+
+  .results-header {
+    margin-bottom: 1rem;
+  }
+
+  .results-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-upload {
+    justify-content: flex-start;
+    padding: 1.5rem 1rem;
+  }
+
+  .upload-steps {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
