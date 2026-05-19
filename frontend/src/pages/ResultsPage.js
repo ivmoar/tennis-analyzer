@@ -7,6 +7,7 @@ import MetricsChart     from '../components/MetricsChart';
 import MetricsBreakdown from '../components/MetricsBreakdown';
 import FeedbackCard     from '../components/FeedbackCard';
 import VideoPlayer      from '../components/VideoPlayer';
+import AdvancedAnalysisPanel from '../components/AdvancedAnalysisPanel';
 
 const s = {
   btn: {
@@ -208,6 +209,8 @@ export default function ResultsPage({ results, onReset }) {
           </div>
 
         </div>
+
+        <AdvancedAnalysisPanel results={results} currentFrame={currentFrame} />
       </div>
     </div>
   );

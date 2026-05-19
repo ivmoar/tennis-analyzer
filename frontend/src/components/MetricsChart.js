@@ -9,18 +9,38 @@ const METRICS = [
   { key: 'shoulder_angle', label: 'Hombro',  color: '#378ADD', lo: 60,  hi: 120 },
   { key: 'knee_angle',     label: 'Rodilla', color: '#1D9E75', lo: 130, hi: 170 },
   { key: 'trunk_tilt',     label: 'Tronco',  color: '#EF9F27', lo: 0,   hi: 20  },
+  { key: 'torso_rotation', label: 'Rotación', color: '#7A5CFF' },
+  { key: 'arm_extension',  label: 'Extensión brazo', color: '#0F6E56' },
+  { key: 'right_wrist_speed', label: 'Muñeca der. vel.', color: '#D14C8B' },
+  { key: 'left_wrist_speed', label: 'Muñeca izq. vel.', color: '#5D7A1F' },
 ];
+
+const PALETTE = ['#E24B4A', '#378ADD', '#1D9E75', '#EF9F27', '#7A5CFF', '#D14C8B', '#0F6E56', '#5D7A1F'];
 
 export default function MetricsChart({ metricsSeries, currentFrame, onFrameClick }) {
   const [active, setActive] = useState('elbow_angle');
 
-  if (!metricsSeries?.length) return null;
+  const dynamicMetrics = React.useMemo(() => {
+    if (!metricsSeries?.length) return [];
+    const first = metricsSeries.find(Boolean) || {};
+    const extraKeys = Object.keys(first)
+      .filter(key => typeof first[key] === 'number')
+      .filter(key => !METRICS.some(m => m.key === key))
+      .map((key, i) => ({
+        key,
+        label: key.replaceAll('_', ' '),
+        color: PALETTE[i % PALETTE.length],
+      }));
+    return [...METRICS.filter(m => first[m.key] !== undefined), ...extraKeys];
+  }, [metricsSeries]);
 
-  const metric = METRICS.find(m => m.key === active);
+  if (!metricsSeries?.length || !dynamicMetrics.length) return null;
+
+  const metric = dynamicMetrics.find(m => m.key === active) || dynamicMetrics[0];
 
   const data = metricsSeries.map((m, i) => ({
     frame: i,
-    value: m ? m[active] : null,
+    value: m && metric ? m[metric.key] : null,
   })).filter(d => d.value !== null);
 
   const handleChartClick = (e) => {
@@ -32,7 +52,7 @@ export default function MetricsChart({ metricsSeries, currentFrame, onFrameClick
   return (
     <div>
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        {METRICS.map(m => (
+        {dynamicMetrics.map(m => (
           <button
             key={m.key}
             onClick={() => setActive(m.key)}
@@ -41,8 +61,8 @@ export default function MetricsChart({ metricsSeries, currentFrame, onFrameClick
               borderRadius: '20px',
               fontSize: '0.8rem',
               fontWeight: '500',
-              background: active === m.key ? m.color : '#f5f5f4',
-              color:      active === m.key ? '#fff'   : '#5f5e5a',
+              background: metric?.key === m.key ? m.color : '#f5f5f4',
+              color:      metric?.key === m.key ? '#fff'   : '#5f5e5a',
               border: 'none',
               cursor: 'pointer',
               transition: 'all 0.15s',
@@ -70,20 +90,24 @@ export default function MetricsChart({ metricsSeries, currentFrame, onFrameClick
             tick={{ fontSize: 10, fill: '#a3a39c' }}
             label={{ value: 'Fotograma', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#a3a39c' }}
           />
-          <YAxis tick={{ fontSize: 10, fill: '#a3a39c' }} unit="°" />
+          <YAxis tick={{ fontSize: 10, fill: '#a3a39c' }} />
           <Tooltip
-            formatter={(v) => [`${v}°`, metric.label]}
+            formatter={(v) => [v, metric.label]}
             labelFormatter={(l) => `Fotograma ${l}`}
             contentStyle={{ fontSize: '0.8rem', borderRadius: '8px', border: '1px solid #e5e5e3' }}
           />
-          <ReferenceArea
-            y1={metric.lo} y2={metric.hi}
-            fill={metric.color}
-            fillOpacity={0.08}
-            label={{ value: 'Rango óptimo', position: 'insideTopRight', fontSize: 9, fill: metric.color }}
-          />
-          <ReferenceLine y={metric.lo} stroke={metric.color} strokeDasharray="3 3" strokeOpacity={0.4} />
-          <ReferenceLine y={metric.hi} stroke={metric.color} strokeDasharray="3 3" strokeOpacity={0.4} />
+          {metric.lo !== undefined && metric.hi !== undefined && (
+            <>
+              <ReferenceArea
+                y1={metric.lo} y2={metric.hi}
+                fill={metric.color}
+                fillOpacity={0.08}
+                label={{ value: 'Rango óptimo', position: 'insideTopRight', fontSize: 9, fill: metric.color }}
+              />
+              <ReferenceLine y={metric.lo} stroke={metric.color} strokeDasharray="3 3" strokeOpacity={0.4} />
+              <ReferenceLine y={metric.hi} stroke={metric.color} strokeDasharray="3 3" strokeOpacity={0.4} />
+            </>
+          )}
           {currentFrame !== null && (
             <ReferenceLine
               x={currentFrame}
