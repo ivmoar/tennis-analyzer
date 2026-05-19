@@ -50,6 +50,7 @@ uvicorn app.main:app --reload
 ```bash
 cd frontend
 npm install
+cp .env.example .env.local       # opcional; apunta al backend local
 npm start
 # App disponible en http://localhost:3000
 ```

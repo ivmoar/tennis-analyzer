@@ -124,19 +124,38 @@ class PoseService:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (30, 30, 30), 1, cv2.LINE_AA)
         return frame
 
+    @staticmethod
+    def _get_rotation(cap) -> int:
+        """Lee los grados de rotación del contenedor (0, 90, 180, 270)."""
+        return int(cap.get(cv2.CAP_PROP_ORIENTATION_META) or 0) % 360
+
+    @staticmethod
+    def _rotate_frame(frame, rotation: int):
+        """Aplica la rotación de corrección opuesta a la del metadato."""
+        if rotation == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        if rotation == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        if rotation == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        return frame
+
     def analyze(self, video_path: str, output_path: str, side: str = "right") -> dict:
         cap = cv2.VideoCapture(video_path)
-        fps   = cap.get(cv2.CAP_PROP_FPS) or 30
-        w     = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h     = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps      = cap.get(cv2.CAP_PROP_FPS) or 30
+        raw_w    = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        raw_h    = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        rotation = self._get_rotation(cap)
+
+        # Tras rotar, las dimensiones reales pueden estar invertidas
+        w, h = (raw_h, raw_w) if rotation in (90, 270) else (raw_w, raw_h)
 
         # No guardar vídeo si output es /dev/null (modo entrenamiento)
         writer = None
         if output_path != "/dev/null":
             writer = cv2.VideoWriter(
                 output_path,
-                cv2.VideoWriter_fourcc(*"mp4v"),
+                cv2.VideoWriter_fourcc(*"avc1"),  # H.264 — reproducible en todos los navegadores
                 fps, (w, h)
             )
 
@@ -159,6 +178,10 @@ class PoseService:
                 if not ret:
                     break
                 frame_idx += 1
+
+                # Corregir orientación antes de cualquier procesado
+                frame = self._rotate_frame(frame, rotation)
+
                 ts_ms  = int(cap.get(cv2.CAP_PROP_POS_MSEC))
                 rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)

@@ -1,7 +1,8 @@
 import os
 import uuid
 import aiofiles
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+import cv2
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 
 from app.services.pose_service import PoseService
@@ -16,11 +17,28 @@ scoring_service = ScoringService()
 feedback_service = FeedbackService()
 
 
+def _remove_if_exists(path: str):
+    if os.path.exists(path):
+        os.remove(path)
+
+
+def _get_video_duration_sec(path: str) -> float:
+    cap = cv2.VideoCapture(path)
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+        if fps <= 0 or frame_count <= 0:
+            return 0.0
+        return frame_count / fps
+    finally:
+        cap.release()
+
+
 @router.post("/analyze")
 async def analyze_video(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    side: str = "right",
+    side: str = Form("right"),
 ):
     """
     Recibe un vídeo de un golpe de derecha y devuelve:
@@ -40,6 +58,12 @@ async def analyze_video(
                    f"Usa MP4, MOV o AVI."
         )
 
+    if side not in {"left", "right"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Lado dominante no válido. Usa 'left' o 'right'."
+        )
+
     # Guardar vídeo temporalmente
     video_id   = str(uuid.uuid4())
     upload_dir = settings.UPLOAD_DIR
@@ -48,11 +72,26 @@ async def analyze_video(
     input_path    = os.path.join(upload_dir, f"{video_id}_input.mp4")
     annotated_path = os.path.join(upload_dir, f"{video_id}_annotated.mp4")
 
+    content = await file.read()
+    size_mb = len(content) / (1024 * 1024)
+    if size_mb > settings.MAX_VIDEO_SIZE_MB:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El vídeo pesa {size_mb:.0f} MB. El límite es {settings.MAX_VIDEO_SIZE_MB} MB."
+        )
+
     async with aiofiles.open(input_path, "wb") as f:
-        content = await file.read()
         await f.write(content)
 
     try:
+        duration_sec = _get_video_duration_sec(input_path)
+        if duration_sec > settings.MAX_VIDEO_DURATION_SEC:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El vídeo dura {duration_sec:.0f} s. "
+                       f"El límite es {settings.MAX_VIDEO_DURATION_SEC} s."
+            )
+
         # 1. Extracción de keypoints y métricas
         pose_result = pose_service.analyze(
             video_path=input_path,
@@ -78,7 +117,7 @@ async def analyze_video(
         )
 
         # 4. Limpiar vídeo de entrada en background
-        background_tasks.add_task(os.remove, input_path)
+        background_tasks.add_task(_remove_if_exists, input_path)
 
         return JSONResponse({
             "video_id":          video_id,
@@ -93,6 +132,10 @@ async def analyze_video(
         })
 
     except HTTPException:
+        _remove_if_exists(input_path)
+        _remove_if_exists(annotated_path)
         raise
     except Exception as e:
+        _remove_if_exists(input_path)
+        _remove_if_exists(annotated_path)
         raise HTTPException(status_code=500, detail=f"Error en el análisis: {str(e)}")

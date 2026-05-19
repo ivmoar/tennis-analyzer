@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer, Legend,
+  Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer,
 } from 'recharts';
 
 const METRICS = [
@@ -11,7 +11,7 @@ const METRICS = [
   { key: 'trunk_tilt',     label: 'Tronco',  color: '#EF9F27', lo: 0,   hi: 20  },
 ];
 
-export default function MetricsChart({ metricsSeries }) {
+export default function MetricsChart({ metricsSeries, currentFrame, onFrameClick }) {
   const [active, setActive] = useState('elbow_angle');
 
   if (!metricsSeries?.length) return null;
@@ -23,9 +23,14 @@ export default function MetricsChart({ metricsSeries }) {
     value: m ? m[active] : null,
   })).filter(d => d.value !== null);
 
+  const handleChartClick = (e) => {
+    if (e?.activePayload?.[0] && onFrameClick) {
+      onFrameClick(e.activePayload[0].payload.frame);
+    }
+  };
+
   return (
     <div>
-      {/* Selector de métrica */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         {METRICS.map(m => (
           <button
@@ -48,8 +53,17 @@ export default function MetricsChart({ metricsSeries }) {
         ))}
       </div>
 
+      <p style={{ fontSize: '0.72rem', color: '#a3a39c', marginBottom: '0.5rem' }}>
+        Haz clic en la gráfica para saltar al frame en el vídeo
+      </p>
+
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+        <LineChart
+          data={data}
+          margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
+          onClick={handleChartClick}
+          style={{ cursor: onFrameClick ? 'pointer' : 'default' }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0ee" />
           <XAxis
             dataKey="frame"
@@ -62,7 +76,6 @@ export default function MetricsChart({ metricsSeries }) {
             labelFormatter={(l) => `Fotograma ${l}`}
             contentStyle={{ fontSize: '0.8rem', borderRadius: '8px', border: '1px solid #e5e5e3' }}
           />
-          {/* Banda del rango óptimo */}
           <ReferenceArea
             y1={metric.lo} y2={metric.hi}
             fill={metric.color}
@@ -71,13 +84,22 @@ export default function MetricsChart({ metricsSeries }) {
           />
           <ReferenceLine y={metric.lo} stroke={metric.color} strokeDasharray="3 3" strokeOpacity={0.4} />
           <ReferenceLine y={metric.hi} stroke={metric.color} strokeDasharray="3 3" strokeOpacity={0.4} />
+          {currentFrame !== null && (
+            <ReferenceLine
+              x={currentFrame}
+              stroke="#1a1a18"
+              strokeWidth={1.5}
+              strokeDasharray="4 2"
+              label={{ value: `▶ ${currentFrame}`, position: 'top', fontSize: 9, fill: '#1a1a18' }}
+            />
+          )}
           <Line
             type="monotone"
             dataKey="value"
             stroke={metric.color}
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4 }}
+            activeDot={{ r: 5, cursor: 'pointer' }}
           />
         </LineChart>
       </ResponsiveContainer>

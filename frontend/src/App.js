@@ -1,11 +1,35 @@
 import React, { useState } from 'react';
-import UploadPage from './pages/UploadPage';
+import Navbar      from './components/Navbar';
+import LandingPage from './pages/LandingPage';
+import UploadPage  from './pages/UploadPage';
 import ResultsPage from './pages/ResultsPage';
+import AboutPage   from './pages/AboutPage';
 
 export default function App() {
   const [results, setResults] = useState(null);
+  const [page,    setPage]    = useState('landing');
 
-  return results
-    ? <ResultsPage results={results} onReset={() => setResults(null)} />
-    : <UploadPage  onResults={setResults} />;
+  const handleNavigate = (dest) => {
+    setResults(null);
+    setPage(dest);
+  };
+
+  const handleResults = (data) => {
+    setResults(data);
+    setPage('results');
+  };
+
+  return (
+    <>
+      <Navbar page={results ? 'results' : page} onNavigate={handleNavigate} />
+      {results
+        ? <ResultsPage results={results} onReset={() => handleNavigate('upload')} />
+        : page === 'about'
+        ? <AboutPage />
+        : page === 'upload'
+        ? <UploadPage onResults={handleResults} />
+        : <LandingPage onStart={() => handleNavigate('upload')} onAbout={() => handleNavigate('about')} />
+      }
+    </>
+  );
 }

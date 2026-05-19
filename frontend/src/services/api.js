@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API = axios.create({ baseURL: 'http://localhost:8000/api' });
+export const API_ORIGIN = process.env.REACT_APP_API_ORIGIN || 'http://localhost:8000';
+
+const API = axios.create({ baseURL: `${API_ORIGIN}/api` });
 
 export async function analyzeVideo(file, side = 'right', onProgress) {
   const form = new FormData();
@@ -8,7 +10,6 @@ export async function analyzeVideo(file, side = 'right', onProgress) {
   form.append('side', side);
 
   const { data } = await API.post('/analyze', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: (e) => {
       if (onProgress && e.total) {
         onProgress(Math.round((e.loaded / e.total) * 100));

@@ -1,162 +1,73 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { analyzeVideo } from '../services/api';
 
-const styles = {
-  header: {
-    textAlign: 'center',
-    maxWidth: '560px',
-  },
-  logo: {
-    fontSize: '2.5rem',
-    marginBottom: '0.5rem',
-  },
-  subtitle: {
-    color: '#5f5e5a',
-    marginTop: '0.5rem',
-    fontSize: '1rem',
-  },
-  card: {
-    background: '#fff',
-    borderRadius: '16px',
-    padding: '2rem',
-    width: '100%',
-    maxWidth: '560px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  dropzone: (isDragActive, hasFile) => ({
-    border: `2px dashed ${isDragActive ? '#1D9E75' : hasFile ? '#378ADD' : '#d3d1c7'}`,
-    borderRadius: '12px',
-    padding: '2.5rem 1.5rem',
-    textAlign: 'center',
-    cursor: 'pointer',
-    background: isDragActive ? '#E1F5EE' : hasFile ? '#E6F1FB' : '#fafaf9',
-    transition: 'all 0.2s',
-  }),
-  dropIcon: {
-    fontSize: '2.5rem',
-    marginBottom: '0.75rem',
-  },
-  dropText: {
-    fontWeight: '600',
-    fontSize: '1rem',
-    color: '#1a1a18',
-  },
-  dropHint: {
-    fontSize: '0.85rem',
-    color: '#888780',
-    marginTop: '0.25rem',
-  },
-  fileInfo: {
-    background: '#E6F1FB',
-    borderRadius: '8px',
-    padding: '0.75rem 1rem',
-    marginTop: '1rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    fontSize: '0.9rem',
-  },
-  fileName: {
-    fontWeight: '500',
-    flex: 1,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  options: {
-    marginTop: '1.25rem',
-    display: 'flex',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '1rem',
-    fontSize: '0.9rem',
-  },
-  select: {
-    padding: '0.4rem 0.75rem',
-    borderRadius: '8px',
-    border: '1px solid #d3d1c7',
-    fontFamily: 'inherit',
-    fontSize: '0.9rem',
-    background: '#fff',
-    cursor: 'pointer',
-  },
-  btn: {
-    width: '100%',
-    marginTop: '1.5rem',
-    padding: '0.85rem',
-    fontSize: '1rem',
-    fontWeight: '600',
-    color: '#fff',
-    background: '#1D9E75',
-    borderRadius: '10px',
-  },
-  progress: {
-    marginTop: '1.25rem',
-  },
-  progressBar: (pct) => ({
-    height: '6px',
-    borderRadius: '3px',
-    background: '#e5e5e3',
-    overflow: 'hidden',
-    marginTop: '0.5rem',
-  }),
-  progressFill: (pct) => ({
-    height: '100%',
-    width: `${pct}%`,
-    background: '#1D9E75',
-    borderRadius: '3px',
-    transition: 'width 0.3s',
-  }),
-  error: {
-    background: '#FCEBEB',
-    color: '#A32D2D',
-    borderRadius: '8px',
-    padding: '0.75rem 1rem',
-    marginTop: '1rem',
-    fontSize: '0.9rem',
-  },
-  step: {
-    flex: 1,
-    background: '#fff',
-    borderRadius: '12px',
-    padding: '1rem',
-    textAlign: 'center',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-  },
-  stepNum: {
-    width: '28px',
-    height: '28px',
-    borderRadius: '50%',
-    background: '#E1F5EE',
-    color: '#0F6E56',
-    fontWeight: '700',
-    fontSize: '0.85rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: '0 auto 0.5rem',
-  },
-  stepText: {
-    fontSize: '0.8rem',
-    color: '#5f5e5a',
-  },
-};
+const ANALYSIS_STEPS = [
+  { id: 'upload',   label: 'Subiendo vídeo',                   icon: '⬆️' },
+  { id: 'pose',     label: 'Extrayendo pose con MediaPipe',     icon: '🦾' },
+  { id: 'metrics',  label: 'Calculando métricas biomecánicas',  icon: '📐' },
+  { id: 'scoring',  label: 'Puntuando con Random Forest',       icon: '🌲' },
+  { id: 'feedback', label: 'Generando feedback con Claude AI',  icon: '🤖' },
+];
 
-const STATUS = {
-  IDLE:       'idle',
-  UPLOADING:  'uploading',
-  ANALYZING:  'analyzing',
-  DONE:       'done',
-  ERROR:      'error',
-};
+const STATUS = { IDLE: 'idle', UPLOADING: 'uploading', ANALYZING: 'analyzing', DONE: 'done', ERROR: 'error' };
+
+function AnalysisLoader({ uploadProgress, analysisStep }) {
+  return (
+    <div>
+      <div className="loader-header">
+        <div className="loader-spinner" />
+        <p className="loader-title">Analizando tu golpe…</p>
+        <p className="loader-subtitle">Este proceso tarda entre 20 y 40 segundos</p>
+      </div>
+
+      {ANALYSIS_STEPS.map((step, i) => {
+        const isUploadStep = i === 0;
+        let state = 'pending';
+        if (isUploadStep) {
+          state = uploadProgress < 100 ? 'active' : 'done';
+        } else {
+          if (analysisStep > i - 1) state = 'done';
+          else if (analysisStep === i - 1) state = 'active';
+        }
+
+        return (
+          <div key={step.id} className={`loader-step step-${state}`}>
+            <span className="loader-step-icon">
+              {state === 'done' ? '✓' : state === 'active' ? step.icon : '○'}
+            </span>
+            <div className="loader-step-text">
+              <p className="loader-step-label">{step.label}</p>
+              {isUploadStep && state === 'active' && (
+                <div>
+                  <div className="upload-progress-bar">
+                    <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                  <p className="upload-progress-pct">{uploadProgress}%</p>
+                </div>
+              )}
+              {state === 'active' && !isUploadStep && (
+                <p className="loader-step-sub">Procesando…</p>
+              )}
+            </div>
+            <div className="loader-step-dot" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function UploadPage({ onResults }) {
-  const [file,     setFile]     = useState(null);
-  const [side,     setSide]     = useState('right');
-  const [status,   setStatus]   = useState(STATUS.IDLE);
-  const [progress, setProgress] = useState(0);
-  const [error,    setError]    = useState('');
+  const [mode,           setMode]           = useState('upload'); // 'upload' | 'camera'
+  const [file,           setFile]           = useState(null);
+  const [side,           setSide]           = useState('right');
+  const [status,         setStatus]         = useState(STATUS.IDLE);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [analysisStep,   setAnalysisStep]   = useState(-1);
+  const [error,          setError]          = useState('');
+  const stepTimers  = useRef([]);
+  const cameraInput = useRef(null);
 
   const onDrop = useCallback((accepted) => {
     if (accepted[0]) { setFile(accepted[0]); setError(''); }
@@ -166,108 +77,196 @@ export default function UploadPage({ onResults }) {
     onDrop,
     accept: { 'video/mp4': [], 'video/quicktime': [], 'video/x-msvideo': [] },
     maxFiles: 1,
-    maxSize: 100 * 1024 * 1024,
+    maxSize: 200 * 1024 * 1024,
   });
+
+  const handleCameraChange = (e) => {
+    const picked = e.target.files?.[0];
+    if (picked) { setFile(picked); setError(''); }
+    // Reset input so re-selecting the same file triggers onChange again
+    e.target.value = '';
+  };
+
+  const handleModeChange = (next) => {
+    setMode(next);
+    setFile(null);
+    setError('');
+  };
+
+  const clearStepTimers = () => {
+    stepTimers.current.forEach(clearTimeout);
+    stepTimers.current = [];
+  };
+
+  useEffect(() => () => clearStepTimers(), []);
+
+  const startAnalysisSteps = () => {
+    setAnalysisStep(0);
+    [0, 6000, 11000, 15000].forEach((delay, i) => {
+      const t = setTimeout(() => setAnalysisStep(i), delay);
+      stepTimers.current.push(t);
+    });
+  };
 
   const handleAnalyze = async () => {
     if (!file) return;
     setStatus(STATUS.UPLOADING);
-    setProgress(0);
+    setUploadProgress(0);
+    setAnalysisStep(-1);
     setError('');
+    clearStepTimers();
+
     try {
       const data = await analyzeVideo(file, side, (pct) => {
-        setProgress(pct);
-        if (pct === 100) setStatus(STATUS.ANALYZING);
+        setUploadProgress(pct);
+        if (pct === 100) {
+          setStatus(STATUS.ANALYZING);
+          startAnalysisSteps();
+        }
       });
+      clearStepTimers();
       setStatus(STATUS.DONE);
       onResults(data);
     } catch (err) {
+      clearStepTimers();
       setStatus(STATUS.ERROR);
       setError(err?.response?.data?.detail || 'Error al analizar el vídeo. Inténtalo de nuevo.');
     }
   };
 
   const isLoading = status === STATUS.UPLOADING || status === STATUS.ANALYZING;
-  const statusLabel = status === STATUS.UPLOADING
-    ? `Subiendo... ${progress}%`
-    : status === STATUS.ANALYZING
-    ? 'Analizando pose y calculando métricas...'
-    : '';
+
+  const dropzoneClass = [
+    'dropzone-area',
+    isDragActive ? 'drag-active' : '',
+    file && mode === 'upload' && !isDragActive ? 'has-file' : '',
+  ].filter(Boolean).join(' ');
 
   return (
-    <div className="page-upload">
-      <div style={styles.header}>
-        <div style={styles.logo}>🎾</div>
-        <h1>TennisAnalyzer</h1>
-        <p style={styles.subtitle}>
-          Análisis automático de la técnica de golpe de derecha mediante visión por computador e IA
-        </p>
+    <div className="upload-page">
+      <div className="upload-hero">
+        <span className="upload-hero-badge">🎾 Análisis con IA</span>
+        <h1>Analiza tu técnica</h1>
+        <p>Sube o graba un vídeo de tu golpe de derecha y recibe métricas biomecánicas y feedback personalizado en segundos</p>
       </div>
 
-      <div className="upload-steps">
-        {[
-          { n: '1', text: 'Sube un vídeo de tu golpe de derecha' },
-          { n: '2', text: 'El sistema analiza tu técnica con IA' },
-          { n: '3', text: 'Recibe métricas y feedback personalizado' },
-        ].map(s => (
-          <div key={s.n} style={styles.step}>
-            <div style={styles.stepNum}>{s.n}</div>
-            <p style={styles.stepText}>{s.text}</p>
-          </div>
-        ))}
-      </div>
+      <div className="upload-body">
+        <div className="upload-card">
 
-      <div style={styles.card}>
-        <div {...getRootProps()} style={styles.dropzone(isDragActive, !!file)}>
-          <input {...getInputProps()} />
-          <div style={styles.dropIcon}>{file ? '📹' : '⬆️'}</div>
-          <p style={styles.dropText}>
-            {isDragActive ? 'Suelta el vídeo aquí' : 'Arrastra tu vídeo aquí'}
-          </p>
-          <p style={styles.dropHint}>o haz clic para seleccionarlo · MP4, MOV, AVI · máx. 100 MB</p>
-        </div>
-
-        {file && (
-          <div style={styles.fileInfo}>
-            <span>📄</span>
-            <span style={styles.fileName}>{file.name}</span>
-            <span style={{ color: '#888780', fontSize: '0.8rem' }}>
-              {(file.size / 1024 / 1024).toFixed(1)} MB
-            </span>
-          </div>
-        )}
-
-        <div style={styles.options}>
-          <label style={{ fontWeight: '500' }}>Lado dominante:</label>
-          <select
-            style={styles.select}
-            value={side}
-            onChange={e => setSide(e.target.value)}
-            disabled={isLoading}
-          >
-            <option value="right">Diestro (derecha)</option>
-            <option value="left">Zurdo (izquierda)</option>
-          </select>
-        </div>
-
-        {isLoading && (
-          <div style={styles.progress}>
-            <p style={{ fontSize: '0.85rem', color: '#5f5e5a' }}>{statusLabel}</p>
-            <div style={styles.progressBar(progress)}>
-              <div style={styles.progressFill(status === STATUS.ANALYZING ? 100 : progress)} />
+          {/* Tabs — solo visibles cuando no se está analizando */}
+          {!isLoading && (
+            <div className="upload-tabs">
+              <button
+                className={`upload-tab ${mode === 'upload' ? 'active' : ''}`}
+                onClick={() => handleModeChange('upload')}
+              >
+                📁 Subir vídeo
+              </button>
+              <button
+                className={`upload-tab ${mode === 'camera' ? 'active' : ''}`}
+                onClick={() => handleModeChange('camera')}
+              >
+                🎥 Grabar ahora
+              </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {error && <div style={styles.error}>⚠️ {error}</div>}
+          {/* Input oculto para cámara */}
+          <input
+            ref={cameraInput}
+            type="file"
+            accept="video/*"
+            capture="camcorder"
+            style={{ display: 'none' }}
+            onChange={handleCameraChange}
+          />
 
-        <button
-          style={styles.btn}
-          onClick={handleAnalyze}
-          disabled={!file || isLoading}
-        >
-          {isLoading ? 'Analizando...' : 'Analizar golpe'}
-        </button>
+          {!isLoading && (
+            <>
+              {/* ── Modo subir ── */}
+              {mode === 'upload' && (
+                <div {...getRootProps()} className={dropzoneClass}>
+                  <input {...getInputProps()} />
+                  <div className="dropzone-icon-wrap">
+                    {file ? '✅' : isDragActive ? '📂' : '🎥'}
+                  </div>
+                  <p className="dropzone-title">
+                    {isDragActive ? 'Suelta aquí' : file ? 'Vídeo listo' : 'Arrastra tu vídeo aquí'}
+                  </p>
+                  {!file && <p className="dropzone-hint">MP4 · MOV · AVI · máx. 200 MB</p>}
+                  {!file && !isDragActive && (
+                    <span className="dropzone-tap-hint">📱 Toca para seleccionar desde el móvil</span>
+                  )}
+                  {file && <p className="dropzone-hint">Toca para cambiar el vídeo</p>}
+                </div>
+              )}
+
+              {/* ── Modo cámara ── */}
+              {mode === 'camera' && (
+                <div className={`camera-panel ${file ? 'has-file' : ''}`}>
+                  <div className="camera-icon-wrap">
+                    {file ? '✅' : '🎬'}
+                  </div>
+                  <p className="camera-title">
+                    {file ? 'Vídeo grabado' : 'Graba tu golpe de derecha'}
+                  </p>
+                  <p className="camera-hint">
+                    {file
+                      ? 'Listo para analizar. Pulsa el botón de abajo.'
+                      : 'Se abrirá la cámara de tu dispositivo directamente'}
+                  </p>
+                  <button
+                    className="camera-trigger-btn"
+                    onClick={() => cameraInput.current?.click()}
+                  >
+                    {file ? '🔄 Grabar de nuevo' : '📹 Abrir cámara'}
+                  </button>
+                </div>
+              )}
+
+              {/* Chip con el fichero seleccionado — aparece en ambos modos */}
+              {file && (
+                <div className="file-chip">
+                  <span style={{ fontSize: '1.2rem' }}>📄</span>
+                  <span className="file-chip-name">{file.name}</span>
+                  <span className="file-chip-size">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                </div>
+              )}
+
+              <div className="side-toggle">
+                <span className="side-toggle-label">Lado dominante</span>
+                <div className="side-pills">
+                  <button
+                    className={`side-pill ${side === 'right' ? 'active' : ''}`}
+                    onClick={() => setSide('right')}
+                  >
+                    Diestro
+                  </button>
+                  <button
+                    className={`side-pill ${side === 'left' ? 'active' : ''}`}
+                    onClick={() => setSide('left')}
+                  >
+                    Zurdo
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isLoading && (
+            <AnalysisLoader uploadProgress={uploadProgress} analysisStep={analysisStep} />
+          )}
+
+          {error && <div className="upload-error">⚠️ {error}</div>}
+
+          <button
+            className="analyze-btn"
+            onClick={handleAnalyze}
+            disabled={!file || isLoading}
+          >
+            {isLoading ? 'Analizando…' : '⚡ Analizar golpe'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,14 +1,18 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
+import { API_ORIGIN } from '../services/api';
 
-export default function VideoPlayer({ url }) {
+const VideoPlayer = forwardRef(({ url, onTimeUpdate, onLoadedMetadata }, ref) => {
   if (!url) return null;
 
-  const fullUrl = url.startsWith('http') ? url : `http://localhost:8000${url}`;
+  const fullUrl = url.startsWith('http') ? url : `${API_ORIGIN}${url}`;
 
   return (
     <video
+      ref={ref}
       src={fullUrl}
       controls
+      onTimeUpdate={onTimeUpdate}
+      onLoadedMetadata={onLoadedMetadata}
       style={{
         width: '100%',
         borderRadius: '8px',
@@ -18,4 +22,6 @@ export default function VideoPlayer({ url }) {
       }}
     />
   );
-}
+});
+
+export default VideoPlayer;
