@@ -254,28 +254,32 @@ class PoseService:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (30, 30, 30), 1, cv2.LINE_AA)
         return frame
 
-    @staticmethod
-    def _get_rotation(cap) -> int:
-        return int(cap.get(cv2.CAP_PROP_ORIENTATION_META) or 0) % 360
-
-    @staticmethod
-    def _rotate_frame(frame, rotation: int):
-        if rotation == 90:
-            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        if rotation == 180:
-            return cv2.rotate(frame, cv2.ROTATE_180)
-        if rotation == 270:
-            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-        return frame
-
     def analyze(self, video_path: str, output_path: str, side: str = "right") -> dict:
         cap = cv2.VideoCapture(video_path)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30
-        raw_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        raw_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        rotation = self._get_rotation(cap)
+        if hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"):
+            cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
 
-        w, h = (raw_h, raw_w) if rotation in (90, 270) else (raw_w, raw_h)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30
+
+        ret, first_frame = cap.read()
+        if not ret:
+            cap.release()
+            return {
+                "metrics_series": [],
+                "landmarks_series": [],
+                "kinematics_series": [],
+                "aggregated_metrics": {},
+                "phases": [],
+                "event_timing": {},
+                "feature_vector": [],
+                "feature_names": [],
+                "landmark_names": LANDMARK_NAMES,
+                "detection_rate": 0,
+                "n_frames": 0,
+                "fps": round(float(fps), 2),
+            }
+
+        h, w = first_frame.shape[:2]
 
         writer = None
         if output_path != "/dev/null":
@@ -299,36 +303,40 @@ class PoseService:
         landmarks_series = []
         frame_idx = 0
 
+        def process_frame(frame):
+            nonlocal frame_idx
+            ts_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            result = landmarker.detect_for_video(mp_img, ts_ms)
+
+            if result.pose_landmarks:
+                lms = result.pose_landmarks[0]
+                metrics = self._compute_metrics(lms, w, h, side)
+                metrics_series.append(metrics)
+                landmarks_series.append({
+                    "frame": frame_idx,
+                    "timestamp_ms": ts_ms,
+                    "landmarks": self._serialize_landmarks(lms, w, h),
+                })
+                frame = self._annotate_frame(frame, lms, metrics, w, h, side)
+            else:
+                metrics_series.append(None)
+                landmarks_series.append(None)
+
+            if writer:
+                writer.write(frame)
+
+            frame_idx += 1
+
         with mp_vision.PoseLandmarker.create_from_options(opts) as landmarker:
+            process_frame(first_frame)
+
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
-                frame_idx += 1
-
-                frame = self._rotate_frame(frame, rotation)
-
-                ts_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                result = landmarker.detect_for_video(mp_img, ts_ms)
-
-                if result.pose_landmarks:
-                    lms = result.pose_landmarks[0]
-                    metrics = self._compute_metrics(lms, w, h, side)
-                    metrics_series.append(metrics)
-                    landmarks_series.append({
-                        "frame": frame_idx - 1,
-                        "timestamp_ms": ts_ms,
-                        "landmarks": self._serialize_landmarks(lms, w, h),
-                    })
-                    frame = self._annotate_frame(frame, lms, metrics, w, h, side)
-                else:
-                    metrics_series.append(None)
-                    landmarks_series.append(None)
-
-                if writer:
-                    writer.write(frame)
+                process_frame(frame)
 
         cap.release()
         if writer:

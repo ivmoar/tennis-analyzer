@@ -1,6 +1,4 @@
 import React, { useRef, useState, useCallback } from 'react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 
 import ScoreGauge       from '../components/ScoreGauge';
 import MetricsChart     from '../components/MetricsChart';
@@ -18,18 +16,6 @@ const s = {
     fontSize: '0.9rem',
     fontWeight: '500',
     color: '#5f5e5a',
-  },
-  btnPdf: {
-    padding: '0.5rem 1.25rem',
-    background: '#1D9E75',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    fontWeight: '600',
-    color: '#fff',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.4rem',
   },
   card: {
     background: '#fff',
@@ -83,10 +69,8 @@ const s = {
 
 export default function ResultsPage({ results, onReset }) {
   const videoRef    = useRef(null);
-  const reportRef   = useRef(null);
   const [currentFrame, setCurrentFrame] = useState(null);
   const [fps,          setFps]          = useState(30);
-  const [exporting,    setExporting]    = useState(false);
 
   const detectionPct = Math.round((results.detection_rate || 0) * 100);
 
@@ -109,36 +93,6 @@ export default function ResultsPage({ results, onReset }) {
     }
   }, [fps]);
 
-  const handleExportPdf = async () => {
-    if (!reportRef.current || exporting) return;
-    setExporting(true);
-    try {
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#f5f5f4',
-        logging: false,
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const imgH = (canvas.height * pageW) / canvas.width;
-
-      let yOffset = 0;
-      while (yOffset < imgH) {
-        if (yOffset > 0) pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, -yOffset, pageW, imgH);
-        yOffset += pageH;
-      }
-
-      const date = new Date().toLocaleDateString('es-ES');
-      pdf.save(`TennisAnalyzer_${date}.pdf`);
-    } finally {
-      setExporting(false);
-    }
-  };
-
   return (
     <div className="page-results">
       <div className="results-header">
@@ -149,15 +103,11 @@ export default function ResultsPage({ results, onReset }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <button style={s.btnPdf} onClick={handleExportPdf} disabled={exporting}>
-            {exporting ? '⏳' : '⬇'} {exporting ? 'Exportando...' : 'Exportar PDF'}
-          </button>
           <button style={s.btn} onClick={onReset}>← Nuevo análisis</button>
         </div>
       </div>
 
-      {/* Zona capturada para PDF (sin vídeo) */}
-      <div ref={reportRef}>
+      <div>
         <div className="results-grid">
 
           {/* Columna izquierda */}
