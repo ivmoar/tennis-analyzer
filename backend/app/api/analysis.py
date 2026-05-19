@@ -123,12 +123,20 @@ async def analyze_video(
             "video_id":          video_id,
             "annotated_video_url": f"/uploads/{video_id}_annotated.mp4",
             "metrics_series":    pose_result["metrics_series"],
+            "landmarks_series":   pose_result["landmarks_series"],
+            "kinematics_series":  pose_result["kinematics_series"],
             "aggregated_metrics": pose_result["aggregated_metrics"],
+            "phases":             pose_result["phases"],
+            "event_timing":       pose_result["event_timing"],
+            "feature_vector":      pose_result["feature_vector"],
+            "feature_names":       pose_result["feature_names"],
+            "landmark_names":      pose_result["landmark_names"],
             "detection_rate":    pose_result["detection_rate"],
             "score":             scoring_result["score"],
             "breakdown":         scoring_result["breakdown"],
             "feedback":          feedback_text,
             "n_frames":          pose_result["n_frames"],
+            "fps":               pose_result["fps"],
         })
 
     except HTTPException:

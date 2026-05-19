@@ -12,6 +12,7 @@ import os
 import numpy as np
 import joblib
 from app.core.config import settings
+from app.services.pose_service import PoseService
 
 # Rangos óptimos de referencia (Elliott et al., 2003; Landlinger et al., 2012)
 REFERENCE_RANGES = {
@@ -39,15 +40,23 @@ FEEDBACK_LABELS = {
 class ScoringService:
 
     def __init__(self):
-        self.model = self._load_model()
+        self.model = None
+        self.feature_names = None
+        self._load_model()
 
     def _load_model(self):
         path = settings.MODEL_PATH
         if os.path.exists(path):
             print(f"Cargando modelo Random Forest desde {path}")
-            return joblib.load(path)
+            payload = joblib.load(path)
+            if isinstance(payload, dict):
+                self.model = payload.get("model")
+                self.feature_names = payload.get("feature_names")
+            else:
+                self.model = payload
+                self.feature_names = None
+            return
         print("Modelo Random Forest no encontrado. Usando scoring por rangos.")
-        return None
 
     def score(self, aggregated_metrics: dict) -> dict:
         """
@@ -105,16 +114,13 @@ class ScoringService:
         breakdown_result["score"] = score
         return breakdown_result
 
-    @staticmethod
-    def _build_feature_vector(aggregated_metrics: dict) -> list:
+    def _build_feature_vector(self, aggregated_metrics: dict) -> list:
         """Construye el vector de características para el modelo."""
+        if not self.feature_names:
+            return PoseService.build_feature_vector(aggregated_metrics)
+
         features = []
-        keys = ["elbow_angle", "shoulder_angle", "knee_angle", "trunk_tilt", "hip_separation"]
-        stats = ["mean", "std", "min", "max", "p25", "p75"]
-        for key in keys:
-            if key in aggregated_metrics:
-                for stat in stats:
-                    features.append(aggregated_metrics[key].get(stat, 0.0))
-            else:
-                features.extend([0.0] * len(stats))
+        for name in self.feature_names:
+            metric, stat = name.rsplit("_", 1)
+            features.append(aggregated_metrics.get(metric, {}).get(stat, 0.0))
         return features

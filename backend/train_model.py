@@ -74,11 +74,12 @@ def extract_features_from_videos(videos_dir: str) -> dict:
                 side="right",
             )
             if result["aggregated_metrics"]:
-                features = _build_feature_vector(result["aggregated_metrics"])
                 cache[filename] = {
-                    "features":       features,
+                    "features":       result["feature_vector"],
+                    "feature_names":  result["feature_names"],
                     "detection_rate": result["detection_rate"],
                     "n_frames":       result["n_frames"],
+                    "event_timing":   result.get("event_timing", {}),
                 }
                 print(f"    OK — {result['n_frames']} fotogramas, "
                       f"detección: {result['detection_rate']*100:.1f}%")
@@ -184,7 +185,7 @@ def train(labels_path: str):
     model.fit(X, y)
 
     # Importancia de características
-    feature_names = _get_feature_names()
+    feature_names = _get_feature_names(cache)
     importances   = sorted(
         zip(feature_names, model.feature_importances_),
         key=lambda x: x[1], reverse=True
@@ -195,7 +196,7 @@ def train(labels_path: str):
 
     # Guardar modelo
     os.makedirs(os.path.dirname(MODEL_OUTPUT_PATH), exist_ok=True)
-    joblib.dump(model, MODEL_OUTPUT_PATH)
+    joblib.dump({"model": model, "feature_names": feature_names}, MODEL_OUTPUT_PATH)
     print(f"\nModelo guardado en: {MODEL_OUTPUT_PATH}")
 
 
@@ -209,7 +210,8 @@ def evaluate(labels_path: str):
         print("ERROR: No hay características extraídas")
         sys.exit(1)
 
-    model = joblib.load(MODEL_OUTPUT_PATH)
+    payload = joblib.load(MODEL_OUTPUT_PATH)
+    model = payload["model"] if isinstance(payload, dict) else payload
     with open(FEATURES_PATH) as f:
         cache = json.load(f)
 
@@ -232,23 +234,14 @@ def evaluate(labels_path: str):
               f"error={abs(real-pred):.1f}")
 
 
-def _build_feature_vector(aggregated_metrics: dict) -> list:
-    keys  = ["elbow_angle", "shoulder_angle", "knee_angle", "trunk_tilt", "hip_separation"]
-    stats = ["mean", "std", "min", "max", "p25", "p75"]
-    features = []
-    for key in keys:
-        if key in aggregated_metrics:
-            for stat in stats:
-                features.append(aggregated_metrics[key].get(stat, 0.0))
-        else:
-            features.extend([0.0] * len(stats))
-    return features
-
-
-def _get_feature_names() -> list:
-    keys  = ["elbow_angle", "shoulder_angle", "knee_angle", "trunk_tilt", "hip_separation"]
-    stats = ["mean", "std", "min", "max", "p25", "p75"]
-    return [f"{k}_{s}" for k in keys for s in stats]
+def _get_feature_names(features_cache: dict) -> list:
+    for item in features_cache.values():
+        if item.get("feature_names"):
+            return item["feature_names"]
+    if features_cache:
+        n = len(next(iter(features_cache.values())).get("features", []))
+        return [f"feature_{i}" for i in range(n)]
+    return []
 
 
 if __name__ == "__main__":
