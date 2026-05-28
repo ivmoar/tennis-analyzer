@@ -2,15 +2,14 @@
 feedback_service.py
 -------------------
 Servicio de generación de feedback textual mediante LLM (Claude).
-Recibe las métricas del golpe y la puntuación, y genera un texto
-de retroalimentación técnica orientado a la mejora del jugador.
+Devuelve un dict estructurado: {summary, issues, tips}
 """
 
+import json
+import re
 import anthropic
 from app.core.config import settings
 
-# Contexto biomecánico de referencia que se incluye en el prompt
-# Basado en: Elliott et al. (2003), Landlinger et al. (2012)
 BIOMECHANICAL_CONTEXT = """
 Criterios biomecánicos del golpe de derecha en tenis (forehand):
 
@@ -35,6 +34,21 @@ TRONCO (inclinación lateral):
 """
 
 
+def _parse_feedback_json(text: str) -> dict:
+    """Extrae el JSON del response de Claude. Fallback si el modelo no cumple el formato."""
+    try:
+        return json.loads(text.strip())
+    except (json.JSONDecodeError, ValueError):
+        pass
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return {"summary": text, "issues": [], "tips": []}
+
+
 class FeedbackService:
 
     def __init__(self):
@@ -42,19 +56,16 @@ class FeedbackService:
         if settings.ANTHROPIC_API_KEY:
             self.client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
-    def generate(self, metrics: dict, score: float, breakdown: dict) -> str:
+    def generate(self, metrics: dict, score: float, breakdown: dict) -> dict:
         """
-        Genera feedback textual personalizado basado en las métricas del golpe.
-        Si no hay API key configurada, devuelve feedback basado en reglas.
+        Devuelve un dict con estructura:
+          { "summary": str, "issues": [str, ...], "tips": [str, ...] }
         """
         if self.client:
             return self._generate_with_llm(metrics, score, breakdown)
         return self._generate_with_rules(score, breakdown)
 
-    def _generate_with_llm(self, metrics: dict, score: float, breakdown: dict) -> str:
-        """Genera feedback usando Claude como LLM."""
-
-        # Construir resumen de métricas para el prompt
+    def _generate_with_llm(self, metrics: dict, score: float, breakdown: dict) -> dict:
         metrics_summary = []
         for key, info in breakdown.items():
             status_text = {
@@ -62,9 +73,8 @@ class FeedbackService:
                 "low":  "por debajo del rango óptimo",
                 "high": "por encima del rango óptimo",
             }.get(info["status"], "desconocido")
-
             metrics_summary.append(
-                f"- {info['label']}: {info['value']}° "
+                f"- {info['label']}: {round(info['value'], 1)}° "
                 f"(rango óptimo {info['range'][0]}-{info['range'][1]}°) "
                 f"— {status_text}, puntuación parcial: {info['score']}/100"
             )
@@ -72,10 +82,6 @@ class FeedbackService:
         metrics_text = "\n".join(metrics_summary)
 
         prompt = f"""Eres un entrenador experto de tenis analizando el golpe de derecha de un jugador.
-        
-Basándote en el siguiente análisis biomecánico y en tu conocimiento técnico del tenis, 
-genera un feedback claro, constructivo y orientado a la mejora. 
-El feedback debe ser comprensible para un jugador no profesional.
 
 {BIOMECHANICAL_CONTEXT}
 
@@ -85,13 +91,19 @@ Puntuación global: {score}/100
 Métricas por dimensión:
 {metrics_text}
 
-INSTRUCCIONES PARA EL FEEDBACK:
-- Empieza reconociendo los aspectos positivos del golpe
-- Identifica los 1-2 aspectos más importantes a mejorar (no todos a la vez)
-- Da indicaciones concretas y accionables para mejorar esos aspectos
-- Usa un tono motivador y constructivo
-- Extensión: 3-4 párrafos
-- No uses tecnicismos excesivos, el jugador debe entenderlo"""
+INSTRUCCIONES:
+Responde ÚNICAMENTE con un objeto JSON válido con esta estructura exacta, sin texto adicional antes ni después:
+{{
+  "summary": "Evaluación general del golpe en 2-3 frases. Menciona puntos positivos y nivel general. Tono motivador.",
+  "issues": ["Descripción del fallo más importante (incluye valor medido y rango óptimo)", "Segundo fallo si existe"],
+  "tips": ["Consejo concreto y accionable para corregir el fallo 1", "Consejo para el fallo 2"]
+}}
+
+Reglas estrictas:
+- summary: exactamente 2-3 frases, sin listas
+- issues: solo los 1-2 fallos más importantes. Array vacío [] si todo está dentro del rango óptimo.
+- tips: un tip por cada issue (misma longitud que issues). Tips prácticos, sin tecnicismos.
+- El JSON debe ser válido. No añadas comentarios ni texto fuera del JSON."""
 
         try:
             message = self.client.messages.create(
@@ -99,56 +111,38 @@ INSTRUCCIONES PARA EL FEEDBACK:
                 max_tokens=600,
                 messages=[{"role": "user", "content": prompt}]
             )
-            return message.content[0].text
+            return _parse_feedback_json(message.content[0].text)
         except Exception as e:
             print(f"Error en LLM: {e}. Usando feedback por reglas.")
             return self._generate_with_rules(score, breakdown)
 
     @staticmethod
-    def _generate_with_rules(score: float, breakdown: dict) -> str:
-        """Feedback basado en reglas cuando no hay LLM disponible."""
-        positives = [
-            info["label"] for info in breakdown.values()
-            if info["status"] == "ok"
-        ]
+    def _generate_with_rules(score: float, breakdown: dict) -> dict:
+        positives = [info["label"] for info in breakdown.values() if info["status"] == "ok"]
         improvements = [
-            (info["label"], info["status"], info["value"], info["range"])
+            (info["label"], info["status"], round(info["value"], 1), info["range"])
             for info in breakdown.values()
             if info["status"] != "ok"
-        ]
-
-        lines = []
-
-        if positives:
-            lines.append(
-                f"Aspectos positivos del golpe: {', '.join(positives)}. "
-                f"Estos elementos están dentro de los rangos técnicos óptimos."
-            )
-
-        if improvements:
-            lines.append("Aspectos a mejorar:")
-            for label, status, val, rng in improvements:
-                if status == "low":
-                    lines.append(
-                        f"- {label}: el valor actual ({val}°) está por debajo "
-                        f"del rango óptimo ({rng[0]}-{rng[1]}°). "
-                        f"Trabaja en aumentar este ángulo durante la ejecución."
-                    )
-                else:
-                    lines.append(
-                        f"- {label}: el valor actual ({val}°) supera "
-                        f"el rango óptimo ({rng[0]}-{rng[1]}°). "
-                        f"Reduce este ángulo para mejorar el control del golpe."
-                    )
+        ][:2]
 
         if score >= 80:
-            lines.append("En general, el golpe muestra una técnica sólida. "
-                         "Continúa trabajando los detalles para alcanzar la excelencia.")
+            base = "El golpe muestra una técnica sólida con buen control general."
         elif score >= 60:
-            lines.append("El golpe tiene una base técnica correcta con margen de mejora "
-                         "en los aspectos indicados.")
+            base = "El golpe tiene una base técnica correcta con margen de mejora."
         else:
-            lines.append("El golpe presenta varios aspectos técnicos a trabajar. "
-                         "Céntrate primero en los más importantes antes de pasar al siguiente.")
+            base = "El golpe presenta varios aspectos técnicos a trabajar."
 
-        return "\n\n".join(lines)
+        summary = base
+        if positives:
+            summary += f" Los ángulos de {', '.join(p.lower() for p in positives)} están dentro de los rangos óptimos."
+
+        issues, tips = [], []
+        for label, status, val, rng in improvements:
+            if status == "low":
+                issues.append(f"{label}: {val}° está por debajo del rango óptimo ({rng[0]}-{rng[1]}°).")
+                tips.append(f"Trabaja en aumentar el ángulo de {label.lower()} durante la ejecución del golpe.")
+            else:
+                issues.append(f"{label}: {val}° supera el rango óptimo ({rng[0]}-{rng[1]}°).")
+                tips.append(f"Reduce el ángulo de {label.lower()} para mejorar el control del golpe.")
+
+        return {"summary": summary, "issues": issues, "tips": tips}

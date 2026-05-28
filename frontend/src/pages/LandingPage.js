@@ -181,7 +181,7 @@ const FEATURES = [
   },
 ];
 
-export default function LandingPage({ onStart, onAbout }) {
+export default function LandingPage({ onStart, onAbout, onDemo }) {
   return (
     <div style={s.page}>
       <div style={s.hero}>
@@ -193,7 +193,10 @@ export default function LandingPage({ onStart, onAbout }) {
         </p>
         <div className="landing-hero-btns">
           <button style={s.heroCta} onClick={onStart}>
-            Empezar análisis gratis →
+            Analizar mi golpe →
+          </button>
+          <button style={{ ...s.heroSecondary, marginLeft: 0 }} onClick={onDemo}>
+            Ver demo
           </button>
           <button style={{ ...s.heroSecondary, marginLeft: 0 }} onClick={onAbout}>
             Cómo funciona

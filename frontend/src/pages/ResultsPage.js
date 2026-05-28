@@ -161,12 +161,22 @@ export default function ResultsPage({ results, onReset }) {
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
               />
+              {!results.annotated_video_url && (
+                <div style={{
+                  textAlign: 'center', padding: '2rem 1rem',
+                  color: '#a3a39c', fontSize: '0.85rem', lineHeight: 1.6,
+                }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📹</div>
+                  Modo demo — sube tu propio vídeo para ver<br />el análisis con landmarks dibujados
+                </div>
+              )}
             </div>
 
             <div style={s.card}>
               <p style={s.cardTitle}>Evolución de métricas cinemáticas</p>
               <MetricsChart
                 metricsSeries={results.metrics_series}
+                phases={results.phases}
                 currentFrame={currentFrame}
                 onFrameClick={handleFrameClick}
               />

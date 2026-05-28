@@ -4,6 +4,7 @@ import LandingPage from './pages/LandingPage';
 import UploadPage  from './pages/UploadPage';
 import ResultsPage from './pages/ResultsPage';
 import AboutPage   from './pages/AboutPage';
+import { demoResults } from './services/demoData';
 
 export default function App() {
   const [results, setResults] = useState(null);
@@ -19,6 +20,11 @@ export default function App() {
     setPage('results');
   };
 
+  const handleDemo = () => {
+    setResults(demoResults);
+    setPage('results');
+  };
+
   return (
     <>
       <Navbar page={results ? 'results' : page} onNavigate={handleNavigate} />
@@ -28,7 +34,7 @@ export default function App() {
         ? <AboutPage />
         : page === 'upload'
         ? <UploadPage onResults={handleResults} />
-        : <LandingPage onStart={() => handleNavigate('upload')} onAbout={() => handleNavigate('about')} />
+        : <LandingPage onStart={() => handleNavigate('upload')} onAbout={() => handleNavigate('about')} onDemo={handleDemo} />
       }
     </>
   );
