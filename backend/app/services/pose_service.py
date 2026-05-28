@@ -255,6 +255,80 @@ class PoseService:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (30, 30, 30), 1, cv2.LINE_AA)
         return frame
 
+    @staticmethod
+    def validate_forehand(pose_result: dict, side: str) -> None:
+        """
+        Valida que el vídeo analizado contiene un golpe de tenis analizable.
+        Lanza ValueError con mensaje de usuario si no supera la validación.
+
+        Comprueba:
+        1. Duración mínima (≥ 15 frames).
+        2. Tasa de detección de pose (≥ 40 % de frames).
+        3. Visibilidad media de hombro, codo y muñeca del lado dominante (≥ 40 %).
+        4. Coherencia fisiológica de los ángulos calculados.
+        """
+        n_frames        = pose_result["n_frames"]
+        detection_rate  = pose_result["detection_rate"]
+        landmarks_series = pose_result["landmarks_series"]
+        agg             = pose_result.get("aggregated_metrics", {})
+
+        # 1. Duración mínima
+        if n_frames < 15:
+            raise ValueError(
+                "El vídeo es demasiado corto. Graba al menos 1 segundo del golpe completo."
+            )
+
+        # 2. Tasa de detección
+        if detection_rate < 0.40:
+            raise ValueError(
+                f"Solo se detectó pose en el {round(detection_rate * 100)}% de los fotogramas. "
+                "Asegúrate de que el jugador aparece de cuerpo completo y bien encuadrado durante todo el vídeo."
+            )
+
+        # 3. Visibilidad de landmarks clave del brazo dominante
+        dom = "right" if side == "right" else "left"
+        key_lms = [f"{dom}_shoulder", f"{dom}_elbow", f"{dom}_wrist"]
+
+        vis_sums   = {lm: 0.0 for lm in key_lms}
+        vis_counts = {lm: 0   for lm in key_lms}
+
+        for frame_data in landmarks_series:
+            if not frame_data:
+                continue
+            for lm in key_lms:
+                lm_data = frame_data.get("landmarks", {}).get(lm)
+                if lm_data is not None:
+                    vis_sums[lm]   += float(lm_data.get("visibility", 0.0))
+                    vis_counts[lm] += 1
+
+        for lm in key_lms:
+            if vis_counts[lm] == 0:
+                continue
+            mean_vis = vis_sums[lm] / vis_counts[lm]
+            if mean_vis < 0.40:
+                part = lm.replace(f"{dom}_", "").replace("_", " ")
+                raise ValueError(
+                    f"El {part} del brazo dominante no se ve con suficiente claridad "
+                    f"(visibilidad media: {mean_vis:.0%}). "
+                    "Graba el golpe de frente o desde el lateral asegurándote de que el brazo completo es visible."
+                )
+
+        # 4. Coherencia fisiológica
+        if "elbow_angle" not in agg or "shoulder_angle" not in agg:
+            raise ValueError(
+                "No se pudo calcular el ángulo del brazo dominante. "
+                "Verifica que el jugador realiza un golpe de derecha completo con el brazo visible."
+            )
+
+        elbow_mean    = agg["elbow_angle"]["mean"]
+        shoulder_mean = agg["shoulder_angle"]["mean"]
+
+        if not (20 < elbow_mean < 220) or not (5 < shoulder_mean < 220):
+            raise ValueError(
+                "Las métricas calculadas no corresponden a un golpe de tenis. "
+                "Verifica que el vídeo muestra a un jugador realizando un golpe de derecha."
+            )
+
     def analyze(self, video_path: str, output_path: str, side: str = "right") -> dict:
         cap = cv2.VideoCapture(video_path)
         if hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"):

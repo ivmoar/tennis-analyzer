@@ -233,6 +233,16 @@ export default function UploadPage({ onResults }) {
                 </div>
               )}
 
+              <div className="upload-tips">
+                <p className="upload-tips-title">Para mejores resultados:</p>
+                <ul>
+                  <li>Jugador visible de cuerpo completo</li>
+                  <li>Brazo dominante sin obstrucciones</li>
+                  <li>Un solo golpe de derecha completo</li>
+                  <li>Cámara fija o con poco movimiento</li>
+                </ul>
+              </div>
+
               <div className="side-toggle">
                 <span className="side-toggle-label">Lado dominante</span>
                 <div className="side-pills">

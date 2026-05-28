@@ -106,6 +106,12 @@ async def analyze_video(
                        "Asegúrate de que el jugador es visible en todo momento."
             )
 
+        # 1b. Validar que el vídeo contiene un golpe de derecha analizable
+        try:
+            pose_service.validate_forehand(pose_result, side)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
         # 2. Puntuación técnica
         scoring_result = scoring_service.score(pose_result["aggregated_metrics"])
 
