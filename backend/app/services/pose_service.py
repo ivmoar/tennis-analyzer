@@ -284,11 +284,19 @@ class PoseService:
 
         writer = None
         if output_path != "/dev/null":
+            # avc1/H.264 no está disponible en opencv-python-headless sin libx264.
+            # mp4v (MPEG-4 Part 2) está incluido de serie y es compatible con todos
+            # los navegadores modernos en contenedor .mp4.
             writer = cv2.VideoWriter(
                 output_path,
-                cv2.VideoWriter_fourcc(*"avc1"),
+                cv2.VideoWriter_fourcc(*"mp4v"),
                 fps, (w, h)
             )
+            if not writer.isOpened():
+                raise RuntimeError(
+                    f"No se pudo abrir el VideoWriter para {output_path}. "
+                    "Comprueba que la ruta de salida existe y el codec mp4v está disponible."
+                )
 
         base_opts = mp_python.BaseOptions(model_asset_path=settings.MEDIAPIPE_MODEL_PATH)
         opts = mp_vision.PoseLandmarkerOptions(
