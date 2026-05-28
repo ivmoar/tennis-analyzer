@@ -5,9 +5,9 @@ import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 import urllib.request
+from app.core.config import settings
 
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-MODEL_PATH = "pose_landmarker_lite.task"
 
 LANDMARK_NAMES = [
     "nose",
@@ -70,9 +70,10 @@ class PoseService:
         self._ensure_model()
 
     def _ensure_model(self):
-        if not os.path.exists(MODEL_PATH):
+        path = settings.MEDIAPIPE_MODEL_PATH
+        if not os.path.exists(path):
             print("Descargando modelo MediaPipe...")
-            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+            urllib.request.urlretrieve(MODEL_URL, path)
             print("Modelo descargado.")
 
     @staticmethod
@@ -289,7 +290,7 @@ class PoseService:
                 fps, (w, h)
             )
 
-        base_opts = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
+        base_opts = mp_python.BaseOptions(model_asset_path=settings.MEDIAPIPE_MODEL_PATH)
         opts = mp_vision.PoseLandmarkerOptions(
             base_options=base_opts,
             running_mode=mp_vision.RunningMode.VIDEO,

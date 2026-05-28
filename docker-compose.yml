@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    volumes:
+      - uploads:/app/uploads
+      # El modelo MediaPipe (~90MB) se descarga automáticamente si no existe.
+      # Para evitar la descarga en cada reinicio, monta el fichero:
+      # - ./backend/pose_landmarker_lite.task:/app/pose_landmarker_lite.task
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  uploads:

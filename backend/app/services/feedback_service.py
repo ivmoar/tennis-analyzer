@@ -95,7 +95,7 @@ INSTRUCCIONES PARA EL FEEDBACK:
 
         try:
             message = self.client.messages.create(
-                model="claude-opus-4-5",
+                model=settings.CLAUDE_MODEL,
                 max_tokens=600,
                 messages=[{"role": "user", "content": prompt}]
             )

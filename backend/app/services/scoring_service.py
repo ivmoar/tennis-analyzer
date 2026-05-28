@@ -12,29 +12,8 @@ import os
 import numpy as np
 import joblib
 from app.core.config import settings
+from app.core.constants import REFERENCE_RANGES, DIMENSION_WEIGHTS, FEEDBACK_LABELS
 from app.services.pose_service import PoseService
-
-# Rangos óptimos de referencia (Elliott et al., 2003; Landlinger et al., 2012)
-REFERENCE_RANGES = {
-    "elbow_angle":    (100, 160),
-    "shoulder_angle": (60,  120),
-    "knee_angle":     (130, 170),
-    "trunk_tilt":     (0,   20),
-}
-
-DIMENSION_WEIGHTS = {
-    "elbow_angle":    0.30,   # Extensión del brazo: crítico en el impacto
-    "shoulder_angle": 0.25,   # Posición del hombro
-    "knee_angle":     0.25,   # Flexión de piernas
-    "trunk_tilt":     0.20,   # Postura del tronco
-}
-
-FEEDBACK_LABELS = {
-    "elbow_angle":    "Extensión de codo",
-    "shoulder_angle": "Posición de hombro",
-    "knee_angle":     "Flexión de rodillas",
-    "trunk_tilt":     "Inclinación de tronco",
-}
 
 
 class ScoringService:
