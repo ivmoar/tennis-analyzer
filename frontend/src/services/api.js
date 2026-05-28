@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-export const API_ORIGIN = process.env.REACT_APP_API_ORIGIN ?? 'http://localhost:8001';
+// En producción (Docker) debe quedar vacío para usar URLs relativas que Nginx proxea.
+// En desarrollo local, el proxy de CRA (package.json) hace lo mismo.
+// Setear REACT_APP_API_ORIGIN sólo si el backend es accesible desde el browser directamente.
+export const API_ORIGIN = process.env.REACT_APP_API_ORIGIN || '';
 
 const API = axios.create({ baseURL: API_ORIGIN ? `${API_ORIGIN}/api` : '/api' });
 

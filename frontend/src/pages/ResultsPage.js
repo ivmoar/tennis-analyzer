@@ -103,7 +103,8 @@ export default function ResultsPage({ results, onReset }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <button style={s.btn} onClick={onReset}>← Nuevo análisis</button>
+          <button style={s.btn} className="no-print" onClick={() => window.print()}>Exportar PDF</button>
+          <button style={s.btn} className="no-print" onClick={onReset}>← Nuevo análisis</button>
         </div>
       </div>
 
@@ -115,6 +116,22 @@ export default function ResultsPage({ results, onReset }) {
             <div style={s.card}>
               <p style={s.cardTitle}>Puntuación global</p>
               <ScoreGauge score={results.score} />
+              <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  padding: '0.2rem 0.65rem',
+                  borderRadius: '12px',
+                  fontSize: '0.72rem',
+                  fontWeight: '600',
+                  background: results.scoring_method === 'model' ? '#E1F5EE' : '#f5f5f4',
+                  color:      results.scoring_method === 'model' ? '#0F6E56' : '#888780',
+                  border: `1px solid ${results.scoring_method === 'model' ? 'rgba(29,158,117,0.3)' : '#e5e5e3'}`,
+                }}>
+                  {results.scoring_method === 'model' ? '🌲 Random Forest' : '📏 Scoring por rangos'}
+                </span>
+              </div>
               <div style={s.statsRow}>
                 <div style={s.statPill}>
                   <div style={s.statVal}>{results.n_frames}</div>

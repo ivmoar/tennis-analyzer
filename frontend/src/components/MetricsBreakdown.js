@@ -73,6 +73,11 @@ export default function MetricsBreakdown({ breakdown }) {
               <span style={{ fontWeight: '600', fontSize: '0.88rem', color: '#1a1a18' }}>{info.label}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ fontSize: '1rem', fontWeight: '700', color: '#1a1a18' }}>{info.value}°</span>
+                {info.score !== undefined && (
+                  <span style={{ fontSize: '0.76rem', color: '#888780', fontWeight: '500' }}>
+                    {Math.round(info.score)}/100
+                  </span>
+                )}
                 <span style={{
                   padding: '0.15rem 0.55rem',
                   borderRadius: '10px',

@@ -1055,6 +1055,42 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   }
 }
 
+/* ── PRINT / PDF EXPORT ───────────────────────────────────────── */
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .navbar,
+  .no-print,
+  .advanced-panel {
+    display: none !important;
+  }
+
+  body { background: #fff; }
+
+  .page-results {
+    padding: 0.5rem 1rem;
+    background: #fff;
+  }
+
+  .results-header {
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e5e5e3;
+  }
+
+  .results-grid {
+    grid-template-columns: 300px 1fr;
+  }
+
+  video {
+    display: none;
+  }
+
+  /* Evitar cortes de página dentro de tarjetas */
+  .results-grid > div > div {
+    break-inside: avoid;
+  }
+}
+
 /* ── RESPONSIVE: SMALL MOBILE ─────────────────────────────────── */
 @media (max-width: 380px) {
   .navbar-logo-name {

@@ -44,8 +44,12 @@ class ScoringService:
         de rangos en caso contrario.
         """
         if self.model is not None:
-            return self._score_with_model(aggregated_metrics)
-        return self._score_with_ranges(aggregated_metrics)
+            result = self._score_with_model(aggregated_metrics)
+            result["scoring_method"] = "model"
+            return result
+        result = self._score_with_ranges(aggregated_metrics)
+        result["scoring_method"] = "rules"
+        return result
 
     def _score_with_ranges(self, aggregated_metrics: dict) -> dict:
         """Scoring basado en proximidad a rangos óptimos bibliográficos."""

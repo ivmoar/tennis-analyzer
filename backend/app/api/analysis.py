@@ -133,6 +133,7 @@ async def analyze_video(
             "landmark_names":      pose_result["landmark_names"],
             "detection_rate":    pose_result["detection_rate"],
             "score":             scoring_result["score"],
+            "scoring_method":    scoring_result.get("scoring_method", "rules"),
             "breakdown":         scoring_result["breakdown"],
             "feedback":          feedback_text,
             "n_frames":          pose_result["n_frames"],

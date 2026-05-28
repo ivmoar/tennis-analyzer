@@ -225,6 +225,7 @@ function FeatureVectorTable({ names = [], values = [] }) {
 }
 
 export default function AdvancedAnalysisPanel({ results, currentFrame }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [selectedFrame, setSelectedFrame] = useState(0);
   const maxFrame = Math.max((results.n_frames || 1) - 1, 0);
 
@@ -252,87 +253,106 @@ export default function AdvancedAnalysisPanel({ results, currentFrame }) {
           <p className="advanced-eyebrow">Datos completos de MediaPipe</p>
           <h2>Análisis biomecánico avanzado</h2>
         </div>
-        <button className="advanced-export-btn" onClick={() => downloadJson(results)}>
-          Exportar JSON completo
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="advanced-export-btn" onClick={() => downloadJson(results)}>
+            Exportar JSON
+          </button>
+          <button
+            className="advanced-export-btn"
+            style={{ background: '#5f5e5a' }}
+            onClick={() => setIsExpanded(v => !v)}
+          >
+            {isExpanded ? 'Colapsar ▲' : 'Expandir ▼'}
+          </button>
+        </div>
       </div>
 
-      <div className="advanced-summary-grid">
-        <SummaryTile label="Landmarks por frame" value={results.landmark_names?.length || 0} />
-        <SummaryTile label="Frames analizados" value={results.n_frames || 0} />
-        <SummaryTile label="FPS" value={formatValue(results.fps)} />
-        <SummaryTile label="Métricas agregadas" value={Object.keys(results.aggregated_metrics || {}).length} />
-        <SummaryTile label="Features ML" value={results.feature_vector?.length || 0} />
-        <SummaryTile label="Fases detectadas" value={results.phases?.length || 0} />
-      </div>
+      {!isExpanded && (
+        <p style={{ fontSize: '0.82rem', color: '#888780', textAlign: 'center', padding: '0.5rem 0' }}>
+          Datos de landmarks, cinemática y vector de features del modelo ML
+        </p>
+      )}
 
-      <Section title="Fases y timing del golpe">
-        <div className="phase-grid">
-          {(results.phases || []).map(phase => (
-            <div key={phase.name} className="phase-card">
-              <strong>{phase.name}</strong>
-              <span>Frames {phase.start_frame}–{phase.end_frame}</span>
-              <span>{phase.start_sec}s – {phase.end_sec}s</span>
-              <em>{phase.duration_sec}s</em>
+      {isExpanded && (
+        <>
+          <div className="advanced-summary-grid">
+            <SummaryTile label="Landmarks por frame" value={results.landmark_names?.length || 0} />
+            <SummaryTile label="Frames analizados" value={results.n_frames || 0} />
+            <SummaryTile label="FPS" value={formatValue(results.fps)} />
+            <SummaryTile label="Métricas agregadas" value={Object.keys(results.aggregated_metrics || {}).length} />
+            <SummaryTile label="Features ML" value={results.feature_vector?.length || 0} />
+            <SummaryTile label="Fases detectadas" value={results.phases?.length || 0} />
+          </div>
+
+          <Section title="Fases y timing del golpe">
+            <div className="phase-grid">
+              {(results.phases || []).map(phase => (
+                <div key={phase.name} className="phase-card">
+                  <strong>{phase.name}</strong>
+                  <span>Frames {phase.start_frame}–{phase.end_frame}</span>
+                  <span>{phase.start_sec}s – {phase.end_sec}s</span>
+                  <em>{phase.duration_sec}s</em>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="event-grid">
-          {Object.entries(results.event_timing || {}).map(([key, value]) => (
-            <div key={key}>
-              <span>{key}</span>
-              <strong>{formatValue(value)}</strong>
+            <div className="event-grid">
+              {Object.entries(results.event_timing || {}).map(([key, value]) => (
+                <div key={key}>
+                  <span>{key}</span>
+                  <strong>{formatValue(value)}</strong>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </Section>
+          </Section>
 
-      <Section title="Métricas agregadas completas">
-        <MetricsTable aggregatedMetrics={results.aggregated_metrics} />
-      </Section>
+          <Section title="Métricas agregadas completas">
+            <MetricsTable aggregatedMetrics={results.aggregated_metrics} />
+          </Section>
 
-      <Section title="Explorador frame a frame">
-        <div className="frame-control">
-          <label htmlFor="advanced-frame">Frame seleccionado</label>
-          <input
-            id="advanced-frame"
-            type="range"
-            min="0"
-            max={maxFrame}
-            value={selectedFrame}
-            onChange={e => setSelectedFrame(Number(e.target.value))}
-          />
-          <input
-            type="number"
-            min="0"
-            max={maxFrame}
-            value={selectedFrame}
-            onChange={e => setSelectedFrame(Math.min(Math.max(Number(e.target.value), 0), maxFrame))}
-          />
-        </div>
-
-        <div className="frame-metric-grid">
-          {compactMetricFrame.map(([key, value]) => (
-            <div key={key}>
-              <span>{key}</span>
-              <strong>{formatValue(value)}</strong>
+          <Section title="Explorador frame a frame">
+            <div className="frame-control">
+              <label htmlFor="advanced-frame">Frame seleccionado</label>
+              <input
+                id="advanced-frame"
+                type="range"
+                min="0"
+                max={maxFrame}
+                value={selectedFrame}
+                onChange={e => setSelectedFrame(Number(e.target.value))}
+              />
+              <input
+                type="number"
+                min="0"
+                max={maxFrame}
+                value={selectedFrame}
+                onChange={e => setSelectedFrame(Math.min(Math.max(Number(e.target.value), 0), maxFrame))}
+              />
             </div>
-          ))}
-        </div>
-      </Section>
 
-      <Section title="33 landmarks del frame seleccionado">
-        <LandmarksTable frameData={landmarkFrame} />
-      </Section>
+            <div className="frame-metric-grid">
+              {compactMetricFrame.map(([key, value]) => (
+                <div key={key}>
+                  <span>{key}</span>
+                  <strong>{formatValue(value)}</strong>
+                </div>
+              ))}
+            </div>
+          </Section>
 
-      <Section title="Velocidades y aceleraciones articulares">
-        <KinematicsTable frameData={kinematicsFrame} />
-        <AngleKinematicsTable frameData={kinematicsFrame} />
-      </Section>
+          <Section title="33 landmarks del frame seleccionado">
+            <LandmarksTable frameData={landmarkFrame} />
+          </Section>
 
-      <Section title="Vector de entrenamiento del modelo">
-        <FeatureVectorTable names={results.feature_names} values={results.feature_vector} />
-      </Section>
+          <Section title="Velocidades y aceleraciones articulares">
+            <KinematicsTable frameData={kinematicsFrame} />
+            <AngleKinematicsTable frameData={kinematicsFrame} />
+          </Section>
+
+          <Section title="Vector de entrenamiento del modelo">
+            <FeatureVectorTable names={results.feature_names} values={results.feature_vector} />
+          </Section>
+        </>
+      )}
     </div>
   );
 }
