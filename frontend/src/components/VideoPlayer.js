@@ -4,7 +4,8 @@ import { API_ORIGIN } from '../services/api';
 const VideoPlayer = forwardRef(({ url, onTimeUpdate, onLoadedMetadata }, ref) => {
   if (!url) return null;
 
-  const fullUrl = url.startsWith('http') ? url : `${API_ORIGIN}${url}`;
+  const BASE = process.env.PUBLIC_URL || '';
+  const fullUrl = url.startsWith('http') ? url : `${BASE}${url}`;
 
   return (
     <video

@@ -118,7 +118,7 @@ export default function AboutPage() {
     <div style={s.page}>
       <div style={s.inner}>
         <div style={s.hero}>
-          <h1 style={s.heroTitle}>Cómo funciona TennisAnalyzer</h1>
+          <h1 style={s.heroTitle}>Cómo funciona Ivanalyze</h1>
           <p style={s.heroSub}>
             Sistema de análisis biomecánico del golpe de derecha desarrollado como Trabajo de Fin de Estudios en la UNIR.
             Combina visión por computador, machine learning y modelos de lenguaje para ofrecer feedback técnico automatizado.

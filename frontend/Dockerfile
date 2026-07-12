@@ -9,6 +9,7 @@ COPY . .
 
 # In production the frontend talks to the same host via nginx (/api relative path)
 ENV REACT_APP_API_ORIGIN=
+ENV PUBLIC_URL=/TFM
 
 RUN npm run build
 

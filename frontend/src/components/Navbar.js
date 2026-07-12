@@ -7,7 +7,7 @@ export default function Navbar({ page, onNavigate }) {
         <div className="navbar-logo" onClick={() => onNavigate('landing')} role="button" tabIndex={0}>
           <div className="navbar-logo-icon">🎾</div>
           <div className="navbar-logo-text">
-            <span className="navbar-logo-name">TennisAnalyzer</span>
+            <span className="navbar-logo-name">Ivanalyze</span>
             <span className="navbar-logo-sub">Análisis biomecánico con IA</span>
           </div>
         </div>

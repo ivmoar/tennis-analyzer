@@ -5,7 +5,8 @@ import axios from 'axios';
 // Setear REACT_APP_API_ORIGIN sólo si el backend es accesible desde el browser directamente.
 export const API_ORIGIN = process.env.REACT_APP_API_ORIGIN || '';
 
-const API = axios.create({ baseURL: API_ORIGIN ? `${API_ORIGIN}/api` : '/api' });
+const BASE_PATH = process.env.PUBLIC_URL || '';
+const API = axios.create({ baseURL: API_ORIGIN ? `${API_ORIGIN}/api` : `${BASE_PATH}/api` });
 
 export async function analyzeVideo(file, side = 'right', onProgress) {
   const form = new FormData();
