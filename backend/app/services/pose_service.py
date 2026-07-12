@@ -429,7 +429,7 @@ class PoseService:
 
         kinematics_series = self._compute_kinematics(landmarks_series, metrics_series, fps)
         enriched_metrics = self._merge_kinematics(metrics_series, kinematics_series)
-        phase_result = self._detect_phases(enriched_metrics, fps)
+        phase_result = self._detect_phases(enriched_metrics, fps, side)
         valid = [m for m in enriched_metrics if m]
         detection_rate = len(valid) / frame_idx if frame_idx > 0 else 0
 
@@ -555,35 +555,81 @@ class PoseService:
             enriched.append(item)
         return enriched
 
-    def _detect_phases(self, metrics_series, fps):
+    @staticmethod
+    def _gaussian_smooth(signal, sigma):
+        """Suaviza una señal 1D con un kernel Gaussiano (numpy puro, sin scipy).
+
+        El jitter de MediaPipe introduce picos espurios en la velocidad de la
+        muñeca; el suavizado evita que ``argmax`` los confunda con el impacto.
+        Se usa relleno 'reflect' en los bordes para no atenuar los extremos.
+        """
+        signal = np.asarray(signal, dtype=float)
+        n = len(signal)
+        if n < 3 or sigma <= 0:
+            return signal
+        radius = min(max(1, int(round(3 * sigma))), n - 1)
+        x = np.arange(-radius, radius + 1)
+        kernel = np.exp(-(x ** 2) / (2 * sigma ** 2))
+        kernel /= kernel.sum()
+        padded = np.pad(signal, radius, mode="reflect")
+        return np.convolve(padded, kernel, mode="valid")
+
+    @staticmethod
+    def _normalize01(signal):
+        """Escala una señal a [0, 1] para poder combinar señales de distinta unidad."""
+        signal = np.asarray(signal, dtype=float)
+        lo, hi = float(signal.min()), float(signal.max())
+        if hi - lo < 1e-9:
+            return np.zeros_like(signal)
+        return (signal - lo) / (hi - lo)
+
+    def _detect_phases(self, metrics_series, fps, side="right"):
         valid = [(i, m) for i, m in enumerate(metrics_series) if m]
         if not valid:
             return {"phases": [], "event_timing": {}}
 
         indices = np.array([i for i, _ in valid])
-        wrist_speed = np.array([
-            max(m.get("right_wrist_speed", 0), m.get("left_wrist_speed", 0))
-            for _, m in valid
-        ])
-        arm_extension = np.array([m.get("arm_extension", 0) for _, m in valid])
-        torso_rotation = np.array([abs(m.get("torso_rotation", 0)) for _, m in valid])
+        # Solo la muñeca del lado dominante: usar max(izq, der) mezclaba la muñeca
+        # de apoyo (ruidosa) con la que ejecuta el golpe y desplazaba el impacto.
+        dom_key = f"{side}_wrist_speed"
+        wrist_speed_raw = np.array([m.get(dom_key, 0.0) for _, m in valid])
+        arm_extension = np.array([m.get("arm_extension", 0.0) for _, m in valid])
+        torso_rotation = np.array([abs(m.get("torso_rotation", 0.0)) for _, m in valid])
 
-        impact_pos = int(np.argmax(wrist_speed))
+        # Suavizado Gaussiano proporcional a fps (robusto a distinta tasa de fotogramas).
+        sigma = max(1.0, fps / 15.0)
+        wrist_speed = self._gaussian_smooth(wrist_speed_raw, sigma)
+        arm_ext_smooth = self._gaussian_smooth(arm_extension, sigma)
+        torso_smooth = self._gaussian_smooth(torso_rotation, sigma)
+
+        # Impacto = pico de velocidad de muñeca (señal primaria) confirmado por la
+        # extensión del brazo (secundaria): en el contacto el brazo está casi
+        # extendido. Se combinan ambas señales normalizadas para dar robustez.
+        impact_score = 0.7 * self._normalize01(wrist_speed) + 0.3 * self._normalize01(arm_ext_smooth)
+        impact_pos = int(np.argmax(impact_score))
         impact_frame = int(indices[impact_pos])
+
+        # Backswing = punto de máxima rotación de tronco + brazo cargado antes del
+        # impacto. Se normalizan ambas señales (grados vs ratio) para que ninguna domine.
         pre_impact = max(0, impact_pos - int(fps * 0.8))
-        backswing_slice = slice(pre_impact, impact_pos + 1)
-        backswing_local = int(np.argmax(torso_rotation[backswing_slice] + arm_extension[backswing_slice]))
-        backswing_pos = pre_impact + backswing_local
+        backswing_signal = self._normalize01(torso_smooth) + self._normalize01(arm_ext_smooth)
+        # Ventana estrictamente anterior al impacto: evita una fase de backswing
+        # de duración cero cuando la señal combinada culmina en el propio impacto.
+        window = backswing_signal[pre_impact:impact_pos]
+        backswing_pos = pre_impact + int(np.argmax(window)) if window.size else pre_impact
         backswing_frame = int(indices[backswing_pos])
 
         prep_end_frame = max(int(indices[0]), backswing_frame)
         follow_start_frame = impact_frame
         follow_end_frame = int(indices[-1])
 
+        # Ventana de impacto de ~±50 ms alrededor del contacto, definida en tiempo
+        # (no en frames) para que sea consistente entre vídeos de 30 y 60 fps.
+        impact_half = max(1, int(round(fps * 0.05)))
         phases = [
             self._phase("preparation", int(indices[0]), prep_end_frame, fps),
             self._phase("backswing_to_acceleration", prep_end_frame, impact_frame, fps),
-            self._phase("impact_window", max(int(indices[0]), impact_frame - 2), min(follow_end_frame, impact_frame + 2), fps),
+            self._phase("impact_window", max(int(indices[0]), impact_frame - impact_half), min(follow_end_frame, impact_frame + impact_half), fps),
             self._phase("follow_through", follow_start_frame, follow_end_frame, fps),
         ]
 
@@ -596,7 +642,8 @@ class PoseService:
             "backswing_peak_sec": round(float(backswing_frame / fps), 3),
             "estimated_impact_sec": round(float(impact_frame / fps), 3),
             "follow_through_end_sec": round(float(follow_end_frame / fps), 3),
-            "max_wrist_speed_px_s": round(float(wrist_speed[impact_pos]), 2),
+            # Pico de la señal suavizada: evita reportar un artefacto de jitter como velocidad máxima.
+            "max_wrist_speed_px_s": round(float(wrist_speed.max()), 2),
             "max_torso_rotation_deg": round(float(torso_rotation.max()), 2),
             "max_arm_extension": round(float(arm_extension.max()), 4),
         }
