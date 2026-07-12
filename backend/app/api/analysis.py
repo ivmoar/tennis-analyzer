@@ -8,13 +8,15 @@ from fastapi.responses import JSONResponse
 from app.services.pose_service import PoseService
 from app.services.scoring_service import ScoringService
 from app.services.feedback_service import FeedbackService
+from app.services.validation_service import ValidationService
 from app.core.config import settings
 
 router = APIRouter()
 
-pose_service    = PoseService()
-scoring_service = ScoringService()
-feedback_service = FeedbackService()
+pose_service       = PoseService()
+scoring_service    = ScoringService()
+feedback_service   = FeedbackService()
+validation_service = ValidationService()
 
 
 def _remove_if_exists(path: str):
@@ -84,6 +86,22 @@ async def analyze_video(
         await f.write(content)
 
     try:
+        # Validación de resolución mínima 720p
+        _cap = cv2.VideoCapture(input_path)
+        try:
+            _width  = int(_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            _height = int(_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        finally:
+            _cap.release()
+        if _width < settings.MIN_VIDEO_WIDTH or _height < settings.MIN_VIDEO_HEIGHT:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Resolución insuficiente: {_width}×{_height}. "
+                    f"Mínimo requerido: {settings.MIN_VIDEO_WIDTH}×{settings.MIN_VIDEO_HEIGHT} (720p)."
+                ),
+            )
+
         duration_sec = _get_video_duration_sec(input_path)
         if duration_sec > settings.MAX_VIDEO_DURATION_SEC:
             raise HTTPException(
@@ -106,11 +124,28 @@ async def analyze_video(
                        "Asegúrate de que el jugador es visible en todo momento."
             )
 
-        # 1b. Validar que el vídeo contiene un golpe de derecha analizable
+        # 1b. Validar que el vídeo contiene un golpe de derecha analizable (MediaPipe)
         try:
             pose_service.validate_forehand(pose_result, side)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
+
+        # 1c. Pipeline de validación de contenido (YOLO): cuerpo, raqueta, pelota, contacto
+        validation_result = validation_service.validate(
+            video_path=input_path,
+            pose_result=pose_result,
+            side=side,
+        )
+        # Check 1-2 son bloqueantes; Check 3 (pelota) y 4 (contacto) son advertencias
+        # ya que YOLOv8n/COCO tiene limitaciones conocidas con pelotas en vuelo rápido.
+        blocking_checks = ["body_detection", "racket_detected"]
+        for check_name in blocking_checks:
+            check = validation_result.checks.get(check_name)
+            if check and not check.passed:
+                raise HTTPException(
+                    status_code=422,
+                    detail=check.message,
+                )
 
         # 2. Puntuación técnica
         scoring_result = scoring_service.score(pose_result["aggregated_metrics"])
@@ -142,6 +177,7 @@ async def analyze_video(
             "scoring_method":    scoring_result.get("scoring_method", "rules"),
             "breakdown":         scoring_result["breakdown"],
             "feedback":          feedback_text,
+            "validation":        validation_result.to_dict(),
             "n_frames":          pose_result["n_frames"],
             "fps":               pose_result["fps"],
         })

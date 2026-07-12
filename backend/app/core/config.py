@@ -8,8 +8,10 @@ class Settings(BaseSettings):
     MODEL_PATH: str = "app/models/random_forest_model.joblib"
     MEDIAPIPE_MODEL_PATH: str = "pose_landmarker_lite.task"
     UPLOAD_DIR: str = "uploads"
-    MAX_VIDEO_SIZE_MB: int = 200
+    MAX_VIDEO_SIZE_MB: int = 500
     MAX_VIDEO_DURATION_SEC: int = 60
+    MIN_VIDEO_WIDTH: int = 1280
+    MIN_VIDEO_HEIGHT: int = 720
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
 
     class Config:
