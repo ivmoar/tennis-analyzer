@@ -388,7 +388,9 @@ class PoseService:
 
         def process_frame(frame):
             nonlocal frame_idx
-            ts_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+            # Calcular timestamp desde frame_idx para garantizar monotonía
+            # (cap.get(CAP_PROP_POS_MSEC) falla con vídeos iPhone VFR)
+            ts_ms = int(frame_idx * 1000 / fps)
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             result = landmarker.detect_for_video(mp_img, ts_ms)
@@ -542,6 +544,14 @@ class PoseService:
                 if "left_wrist" in kin["landmarks"]:
                     item["left_wrist_speed"] = kin["landmarks"]["left_wrist"]["speed"]
                     item["left_wrist_acceleration"] = kin["landmarks"]["left_wrist"]["acceleration"]
+                # wrist_speed unificado (max dominante) — usado en REFERENCE_RANGES y scoring
+                item["wrist_speed"] = max(
+                    item.get("right_wrist_speed", 0.0),
+                    item.get("left_wrist_speed", 0.0),
+                )
+            # hip_separation en grados: rotación relativa cadera-hombros (torso_rotation)
+            # Mantiene consistencia con REFERENCE_RANGES (20–60°) y la descripción biomecánica
+            item["hip_separation"] = abs(item.get("torso_rotation", 0.0))
             enriched.append(item)
         return enriched
 

@@ -1,7 +1,7 @@
 """
 feedback_service.py
 -------------------
-Servicio de generación de feedback textual mediante LLM (Claude).
+Servicio de generación de feedback textual mediante LLM (Claude) + RAG (ChromaDB).
 Devuelve un dict estructurado: {summary, issues, tips}
 """
 
@@ -10,32 +10,39 @@ import re
 import anthropic
 from app.core.config import settings
 
+# Contexto de fallback cuando ChromaDB no está disponible — cubre las 6 métricas
 BIOMECHANICAL_CONTEXT = """
-Criterios biomecánicos del golpe de derecha en tenis (forehand):
+Criterios biomecánicos del golpe de derecha en tenis (forehand).
+Rangos basados en Elliott et al. (2003) y Landlinger et al. (2012).
 
-CODO (ángulo en el impacto):
-- Rango óptimo: 100-160 grados
-- Por debajo de 100: flexión excesiva, reduce el alcance y la transferencia de fuerza
-- Por encima de 160: hiperextensión prematura, pérdida de control
+CODO (elbow_angle) — rango óptimo 100–160°:
+- Por debajo de 100°: flexión excesiva, acorta la palanca y reduce potencia y alcance.
+- Por encima de 160°: hiperextensión prematura, pérdida de control del golpe.
 
-HOMBRO (ángulo de elevación del brazo dominante):
-- Rango óptimo: 60-120 grados
-- Por debajo de 60: brazo demasiado bajo, reduce la zona de impacto
-- Por encima de 120: brazo demasiado elevado, dificulta el giro de muñeca
+HOMBRO (shoulder_angle) — rango óptimo 60–120°:
+- Por debajo de 60°: brazo demasiado bajo, reduce la zona de impacto.
+- Por encima de 120°: brazo muy elevado, dificulta la pronación de muñeca.
 
-RODILLAS (flexión durante la ejecución):
-- Rango óptimo: 130-170 grados (ligera flexión)
-- Por debajo de 130: flexión excesiva, limita la transferencia de energía desde las piernas
-- Por encima de 170: piernas muy extendidas, reduce la estabilidad
+RODILLAS (knee_angle) — rango óptimo 130–170°:
+- Por debajo de 130°: flexión excesiva, limita la transferencia de energía desde las piernas.
+- Por encima de 170°: piernas casi rectas, reduce estabilidad y base de apoyo.
 
-TRONCO (inclinación lateral):
-- Rango óptimo: 0-20 grados
-- Por encima de 20: inclinación excesiva, puede indicar desequilibrio o compensación técnica
+TRONCO (trunk_tilt) — rango óptimo 0–20°:
+- Por encima de 20°: inclinación lateral excesiva, indica desequilibrio postural o compensación técnica.
+
+ROTACIÓN DE CADERAS (hip_separation) — rango óptimo 20–60°:
+- Por debajo de 20°: caderas y hombros rotan juntos, sin separación. Pérdida de potencia por cadena cinética incompleta.
+- Por encima de 60°: apertura prematura de caderas antes del impacto, reduce control direccional.
+- La secuencia óptima de la cadena cinética es: caderas → hombros → codo → muñeca.
+
+VELOCIDAD DE MUÑECA (wrist_speed) — rango óptimo 200–600 °/s:
+- Por debajo de 200°/s: muñeca bloqueada, sin aceleración distal. Golpe sin potencia ni topspin efectivo.
+- Por encima de 600°/s: exceso de fuerza en el segmento distal sin apoyo de la cadena cinética proximal.
 """
 
 
 def _parse_feedback_json(text: str) -> dict:
-    """Extrae el JSON del response de Claude. Fallback si el modelo no cumple el formato."""
+    """Extrae el JSON del response del LLM. Fallback si el modelo no cumple el formato."""
     try:
         return json.loads(text.strip())
     except (json.JSONDecodeError, ValueError):
@@ -55,6 +62,11 @@ class FeedbackService:
         self.client = None
         if settings.ANTHROPIC_API_KEY:
             self.client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        try:
+            from app.services.rag_service import RAGService
+            self.rag = RAGService()
+        except ImportError:
+            self.rag = None
 
     def generate(self, metrics: dict, score: float, breakdown: dict) -> dict:
         """
@@ -66,6 +78,14 @@ class FeedbackService:
         return self._generate_with_rules(score, breakdown)
 
     def _generate_with_llm(self, metrics: dict, score: float, breakdown: dict) -> dict:
+        # Construir query RAG a partir de las métricas fuera de rango
+        failing = [info["label"] for info in breakdown.values() if info["status"] != "ok"]
+        rag_query = " ".join(failing) if failing else "técnica golpe derecha tenis"
+        if self.rag is not None:
+            biomechanical_context = self.rag.retrieve(rag_query)
+        else:
+            biomechanical_context = BIOMECHANICAL_CONTEXT
+
         metrics_summary = []
         for key, info in breakdown.items():
             status_text = {
@@ -83,7 +103,7 @@ class FeedbackService:
 
         prompt = f"""Eres un entrenador experto de tenis analizando el golpe de derecha de un jugador.
 
-{BIOMECHANICAL_CONTEXT}
+{biomechanical_context}
 
 RESULTADOS DEL ANÁLISIS:
 Puntuación global: {score}/100
