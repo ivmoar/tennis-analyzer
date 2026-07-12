@@ -44,6 +44,12 @@ backend/data/videos/*.mp4
 backend/data/videos/*.mov
 backend/data/videos/*.avi
 
+# Raw source videos (large, not needed in repo — kept locally / on backup)
+backend/data/raw_videos/
+# Feature extraction cache (regenerable) and Apple Numbers spec files
+backend/data/labels/features_cache.json
+*.numbers
+
 # Trained model (large binary, track separately if needed)
 backend/app/models/*.joblib
 backend/app/models/*.pkl

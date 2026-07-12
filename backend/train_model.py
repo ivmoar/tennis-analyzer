@@ -28,6 +28,7 @@ import joblib
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
+from xgboost import XGBRegressor
 
 # Añadir el backend al path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -167,37 +168,62 @@ def train(labels_path: str):
     print(f"Puntuación media: {y.mean():.1f} | Desv. típica: {y.std():.1f}")
     print(f"Rango: {y.min():.0f} - {y.max():.0f}")
 
-    # Validación cruzada
-    model = RandomForestRegressor(
+    rf_model = RandomForestRegressor(
         n_estimators=100,
         max_depth=10,
         min_samples_leaf=2,
         random_state=42,
     )
+    xgb_model = XGBRegressor(
+        n_estimators=100,
+        max_depth=6,
+        learning_rate=0.1,
+        random_state=42,
+    )
 
-    if len(X) >= 10:
-        cv_scores = cross_val_score(model, X, y, cv=5, scoring="neg_mean_absolute_error")
-        print(f"\nValidación cruzada (5-fold):")
-        print(f"  MAE medio: {-cv_scores.mean():.2f} puntos")
-        print(f"  Desv. típica: {cv_scores.std():.2f}")
-
-    # Entrenamiento final con todos los datos
-    model.fit(X, y)
-
-    # Importancia de características
     feature_names = _get_feature_names(cache)
-    importances   = sorted(
-        zip(feature_names, model.feature_importances_),
+
+    # Validación cruzada comparativa (5-fold, MAE)
+    results = {}
+    for name, m in [("RandomForest", rf_model), ("XGBoost", xgb_model)]:
+        if len(X) >= 10:
+            cv = cross_val_score(m, X, y, cv=5, scoring="neg_mean_absolute_error")
+            results[name] = {"mae": -cv.mean(), "std": cv.std(), "model": m}
+        else:
+            results[name] = {"mae": float("inf"), "std": 0.0, "model": m}
+
+    print(f"\n{'Modelo':<15} {'MAE_cv':>8} {'Std':>8}")
+    print("-" * 35)
+    for name, r in results.items():
+        print(f"{name:<15} {r['mae']:>8.2f} {r['std']:>8.2f}")
+
+    # Elegir el modelo con menor MAE
+    best_name = min(results, key=lambda k: results[k]["mae"])
+    best_model = results[best_name]["model"]
+    print(f"\nMejor modelo: {best_name} (MAE={results[best_name]['mae']:.2f})")
+
+    # Entrenar ambos con todos los datos
+    rf_model.fit(X, y)
+    xgb_model.fit(X, y)
+
+    # Importancia de características del mejor modelo
+    importances = sorted(
+        zip(feature_names, best_model.feature_importances_),
         key=lambda x: x[1], reverse=True
     )
     print("\nImportancia de características (top 10):")
-    for name, imp in importances[:10]:
-        print(f"  {name}: {imp:.3f}")
+    for feat, imp in importances[:10]:
+        print(f"  {feat}: {imp:.3f}")
 
-    # Guardar modelo
+    # Guardar mejor modelo como producción
     os.makedirs(os.path.dirname(MODEL_OUTPUT_PATH), exist_ok=True)
-    joblib.dump({"model": model, "feature_names": feature_names}, MODEL_OUTPUT_PATH)
-    print(f"\nModelo guardado en: {MODEL_OUTPUT_PATH}")
+    joblib.dump({"model": best_model, "feature_names": feature_names}, MODEL_OUTPUT_PATH)
+    print(f"\nModelo de producción guardado en: {MODEL_OUTPUT_PATH}")
+
+    # Guardar XGBoost siempre como referencia
+    xgb_path = "app/models/xgboost_model.joblib"
+    joblib.dump({"model": xgb_model, "feature_names": feature_names}, xgb_path)
+    print(f"Modelo XGBoost guardado en: {xgb_path}")
 
 
 def evaluate(labels_path: str):
