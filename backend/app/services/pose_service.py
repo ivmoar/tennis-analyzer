@@ -1,4 +1,5 @@
 import os
+import subprocess
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -426,6 +427,26 @@ class PoseService:
         cap.release()
         if writer:
             writer.release()
+            # Transcodificar a H.264 con faststart para compatibilidad universal (iOS Safari, Android)
+            # mp4v (MPEG-4 Part 2) no es reproducible en navegadores móviles
+            tmp_path = output_path + ".h264.mp4"
+            try:
+                subprocess.run(
+                    [
+                        "ffmpeg", "-y", "-i", output_path,
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                        "-movflags", "+faststart",
+                        "-an",
+                        tmp_path,
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
+                os.replace(tmp_path, output_path)
+            except Exception:
+                # Si ffmpeg falla, dejar el mp4v original (mejor que nada en desktop)
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
 
         kinematics_series = self._compute_kinematics(landmarks_series, metrics_series, fps)
         enriched_metrics = self._merge_kinematics(metrics_series, kinematics_series)
