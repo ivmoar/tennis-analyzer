@@ -5,16 +5,20 @@ Script para etiquetar vídeos y entrenar el modelo Random Forest
 de puntuación técnica del golpe de derecha.
 
 Uso:
-  # Paso 1: procesar vídeos y generar archivo de etiquetas
-  python train_model.py --mode label --videos_dir data/videos
+  # Paso 0: pon los vídeos fuente en data/raw/ y rellena data/cuts/cuts.csv
+  #   (columnas: video_file, start, end, score, notes)
+  python train_model.py --mode cut
 
-  # Paso 2: revisar y editar data/labels/labels.csv con tus puntuaciones (0-100)
+  # Paso 1: extraer características de los cortes
+  python train_model.py --mode label
+
+  # Paso 2: revisar data/labels/labels.csv y añadir scores si faltan
 
   # Paso 3: entrenar el modelo
-  python train_model.py --mode train --labels data/labels/labels.csv
+  python train_model.py --mode train
 
   # Paso 4: evaluar el modelo entrenado
-  python train_model.py --mode evaluate --labels data/labels/labels.csv
+  python train_model.py --mode evaluate
 """
 
 import argparse
@@ -22,6 +26,7 @@ import os
 import sys
 import json
 import csv
+import subprocess
 
 import numpy as np
 import joblib
@@ -37,6 +42,107 @@ from app.services.pose_service import PoseService
 MODEL_OUTPUT_PATH = "app/models/random_forest_model.joblib"
 LABELS_PATH       = "data/labels/labels.csv"
 FEATURES_PATH     = "data/labels/features_cache.json"
+CUTS_PATH         = "data/cuts/cuts.csv"
+CUTS_OUTPUT_DIR   = "data/videos"
+CUTS_SOURCE_DIR   = "data/raw_videos"
+
+
+def cut_videos_from_csv(cuts_path: str = CUTS_PATH,
+                        source_dir: str = CUTS_SOURCE_DIR,
+                        output_dir: str = CUTS_OUTPUT_DIR):
+    """
+    Lee cuts.csv y recorta cada segmento con ffmpeg.
+
+    Formato del CSV:
+      video_file, start, end, score, notes
+      IMG_2393.MOV, 0:10, 0:12, 57, poca extensión
+
+    Los cortes se guardan en output_dir con nombre <video_base>_<start>_<end>.mp4
+    y se añaden automáticamente a labels.csv con su score.
+    """
+    if not os.path.exists(cuts_path):
+        print(f"ERROR: No se encuentra {cuts_path}")
+        print(f"Crea el archivo con columnas: video_file,start,end,score,notes")
+        sys.exit(1)
+
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(LABELS_PATH), exist_ok=True)
+
+    # Cargar etiquetas existentes para no duplicar
+    existing_labels = {}
+    if os.path.exists(LABELS_PATH):
+        with open(LABELS_PATH) as f:
+            for row in csv.DictReader(f):
+                existing_labels[row["filename"]] = row
+
+    new_entries = []
+
+    with open(cuts_path) as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    print(f"\nProcesando {len(rows)} cortes de {cuts_path}...\n")
+
+    for row in rows:
+        video_file = row["video_file"].strip()
+        start      = row["start"].strip()
+        end        = row["end"].strip()
+        score      = row.get("score", "").strip()
+        notes      = row.get("notes", "").strip()
+
+        # Nombre único del corte
+        slug = start.replace(":", "-") + "_" + end.replace(":", "-")
+        base = os.path.splitext(video_file)[0]
+        out_name = f"{base}__{slug}.mp4"
+        out_path = os.path.join(output_dir, out_name)
+
+        if out_name in existing_labels:
+            print(f"  [ya existe] {out_name}")
+            continue
+
+        src_path = os.path.join(source_dir, video_file)
+        if not os.path.exists(src_path):
+            print(f"  [AVISO] No se encuentra el vídeo fuente: {src_path}")
+            continue
+
+        print(f"  Cortando {video_file} [{start} → {end}] → {out_name}")
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-ss", start, "-to", end,
+                    "-i", src_path,
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+                    "-movflags", "+faststart",
+                    "-an",
+                    out_path,
+                ],
+                check=True,
+                capture_output=True,
+            )
+            print(f"    OK")
+            new_entries.append({"filename": out_name, "score": score, "notes": notes})
+        except subprocess.CalledProcessError as e:
+            print(f"    ERROR ffmpeg: {e.stderr.decode()[-200:]}")
+
+    # Añadir nuevas entradas a labels.csv
+    if new_entries:
+        write_header = not os.path.exists(LABELS_PATH)
+        with open(LABELS_PATH, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["filename", "score", "notes"])
+            if write_header:
+                writer.writeheader()
+            writer.writerows(new_entries)
+        print(f"\n{len(new_entries)} corte(s) añadidos a {LABELS_PATH}")
+        no_score = [e["filename"] for e in new_entries if not e["score"]]
+        if no_score:
+            print(f"Recuerda añadir el score en {LABELS_PATH} para:")
+            for n in no_score:
+                print(f"  - {n}")
+    else:
+        print("\nNada nuevo que procesar.")
+
+    print(f"\nSiguiente paso: python train_model.py --mode label")
 
 
 def extract_features_from_videos(videos_dir: str) -> dict:
@@ -274,14 +380,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Etiquetado y entrenamiento del modelo de puntuación"
     )
-    parser.add_argument("--mode", choices=["label", "train", "evaluate"], required=True)
+    parser.add_argument("--mode", choices=["cut", "label", "train", "evaluate"], required=True)
     parser.add_argument("--videos_dir", default="data/videos",
                         help="Directorio con los vídeos de entrenamiento")
     parser.add_argument("--labels",     default=LABELS_PATH,
                         help="Ruta al archivo CSV de etiquetas")
+    parser.add_argument("--cuts",       default=CUTS_PATH,
+                        help="Ruta al CSV de cortes (modo cut)")
+    parser.add_argument("--source_dir", default=CUTS_SOURCE_DIR,
+                        help="Directorio con los vídeos fuente (modo cut)")
     args = parser.parse_args()
 
-    if args.mode == "label":
+    if args.mode == "cut":
+        cut_videos_from_csv(args.cuts, args.source_dir, args.videos_dir)
+    elif args.mode == "label":
         cache = extract_features_from_videos(args.videos_dir)
         generate_labels_csv(cache)
     elif args.mode == "train":
