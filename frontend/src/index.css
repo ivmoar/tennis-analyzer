@@ -456,6 +456,21 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   margin-top: 0.1rem;
 }
 
+.dropzone-select-btn {
+  margin-top: 0.5rem;
+  padding: 0.55rem 1.5rem;
+  background: #fff;
+  border: 1.5px solid var(--green);
+  color: var(--green-mid);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.dropzone-select-btn:hover { background: var(--green-light); opacity: 1; }
+
 /* ── FILE CHIP ──────────────────────────────────────────────────── */
 .file-chip {
   display: flex;

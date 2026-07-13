@@ -4,18 +4,19 @@ import {
   Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer,
 } from 'recharts';
 
+// Solo las 10 features del Set A
 const METRICS = [
-  { key: 'elbow_angle',    label: 'Codo',    color: '#E24B4A', lo: 100, hi: 160 },
-  { key: 'shoulder_angle', label: 'Hombro',  color: '#378ADD', lo: 60,  hi: 120 },
-  { key: 'knee_angle',     label: 'Rodilla', color: '#1D9E75', lo: 130, hi: 170 },
-  { key: 'trunk_tilt',     label: 'Tronco',  color: '#EF9F27', lo: 0,   hi: 20  },
-  { key: 'torso_rotation', label: 'Rotación', color: '#7A5CFF' },
-  { key: 'arm_extension',  label: 'Extensión brazo', color: '#0F6E56' },
-  { key: 'right_wrist_speed', label: 'Muñeca der. vel.', color: '#D14C8B' },
-  { key: 'left_wrist_speed',  label: 'Muñeca izq. vel.', color: '#5D7A1F' },
+  { key: 'elbow_angle',                   label: 'Codo',               color: '#E24B4A', lo: 100, hi: 160 },
+  { key: 'shoulder_angle',                label: 'Hombro',             color: '#378ADD', lo: 60,  hi: 120 },
+  { key: 'knee_angle',                    label: 'Rodilla',            color: '#1D9E75', lo: 130, hi: 170 },
+  { key: 'trunk_tilt',                    label: 'Tronco',             color: '#EF9F27', lo: 0,   hi: 20  },
+  { key: 'torso_rotation',                label: 'Rotación torso',     color: '#7A5CFF' },
+  { key: 'right_wrist_speed',             label: 'Vel. muñeca',        color: '#D14C8B' },
+  { key: 'shoulder_line_angle',           label: 'Línea hombros',      color: '#0F6E56' },
+  { key: 'hand_to_opp_shoulder_distance', label: 'Dist. hombro cont.', color: '#F97316' },
+  { key: 'opp_elbow_angle',               label: 'Codo contrario',     color: '#06B6D4' },
+  { key: 'foot_alignment',                label: 'Alineación pies',    color: '#84CC16' },
 ];
-
-const PALETTE = ['#E24B4A', '#378ADD', '#1D9E75', '#EF9F27', '#7A5CFF', '#D14C8B', '#0F6E56', '#5D7A1F'];
 
 const PHASE_STYLES = {
   'preparación':    { fill: '#378ADD', opacity: 0.08 },
@@ -30,15 +31,7 @@ export default function MetricsChart({ metricsSeries, phases, currentFrame, onFr
   const dynamicMetrics = React.useMemo(() => {
     if (!metricsSeries?.length) return [];
     const first = metricsSeries.find(Boolean) || {};
-    const extraKeys = Object.keys(first)
-      .filter(key => typeof first[key] === 'number')
-      .filter(key => !METRICS.some(m => m.key === key))
-      .map((key, i) => ({
-        key,
-        label: key.replaceAll('_', ' '),
-        color: PALETTE[i % PALETTE.length],
-      }));
-    return [...METRICS.filter(m => first[m.key] !== undefined), ...extraKeys];
+    return METRICS.filter(m => first[m.key] !== undefined);
   }, [metricsSeries]);
 
   if (!metricsSeries?.length || !dynamicMetrics.length) return null;

@@ -3,11 +3,13 @@ import { useDropzone } from 'react-dropzone';
 import { analyzeVideo } from '../services/api';
 
 const ANALYSIS_STEPS = [
-  { id: 'upload',   label: 'Subiendo vídeo',                   icon: '⬆️' },
-  { id: 'pose',     label: 'Extrayendo pose con MediaPipe',     icon: '🦾' },
-  { id: 'metrics',  label: 'Calculando métricas biomecánicas',  icon: '📐' },
-  { id: 'scoring',  label: 'Puntuando con Random Forest',       icon: '🌲' },
-  { id: 'feedback', label: 'Generando feedback con Claude AI',  icon: '🤖' },
+  { id: 'upload',    label: 'Subiendo vídeo',                       icon: '⬆️' },
+  { id: 'validate',  label: 'Validando el contenido del vídeo',     icon: '🔍' },
+  { id: 'pose',      label: 'Analizando tu movimiento',             icon: '🏃' },
+  { id: 'metrics',   label: 'Calculando métricas',                  icon: '📊' },
+  { id: 'scoring',   label: 'Calculando tu puntuación técnica',     icon: '⭐' },
+  { id: 'rag',       label: 'Buscando referencias biomecánicas',    icon: '📚' },
+  { id: 'feedback',  label: 'Generando tu feedback personalizado',  icon: '💬' },
 ];
 
 const STATUS = { IDLE: 'idle', UPLOADING: 'uploading', ANALYZING: 'analyzing', DONE: 'done', ERROR: 'error' };
@@ -66,8 +68,19 @@ export default function UploadPage({ onResults }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [analysisStep,   setAnalysisStep]   = useState(-1);
   const [error,          setError]          = useState('');
+  const [isMobile,       setIsMobile]       = useState(false);
   const stepTimers  = useRef([]);
   const cameraInput = useRef(null);
+  const fileInput   = useRef(null);
+
+  useEffect(() => {
+    const check = () => setIsMobile(
+      /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768
+    );
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   const onDrop = useCallback((accepted) => {
     if (accepted[0]) { setFile(accepted[0]); setError(''); }
@@ -102,7 +115,8 @@ export default function UploadPage({ onResults }) {
 
   const startAnalysisSteps = () => {
     setAnalysisStep(0);
-    [0, 6000, 11000, 15000].forEach((delay, i) => {
+    // 6 pasos de análisis tras la subida: validate, pose, metrics, scoring, rag, feedback
+    [0, 4000, 10000, 16000, 21000, 26000].forEach((delay, i) => {
       const t = setTimeout(() => setAnalysisStep(i), delay);
       stepTimers.current.push(t);
     });
@@ -153,24 +167,6 @@ export default function UploadPage({ onResults }) {
       <div className="upload-body">
         <div className="upload-card">
 
-          {/* Tabs — solo visibles cuando no se está analizando */}
-          {!isLoading && (
-            <div className="upload-tabs">
-              <button
-                className={`upload-tab ${mode === 'upload' ? 'active' : ''}`}
-                onClick={() => handleModeChange('upload')}
-              >
-                📁 Subir vídeo
-              </button>
-              <button
-                className={`upload-tab ${mode === 'camera' ? 'active' : ''}`}
-                onClick={() => handleModeChange('camera')}
-              >
-                🎥 Grabar ahora
-              </button>
-            </div>
-          )}
-
           {/* Input oculto para cámara */}
           <input
             ref={cameraInput}
@@ -181,31 +177,86 @@ export default function UploadPage({ onResults }) {
             onChange={handleCameraChange}
           />
 
+          {/* Input oculto para selección de archivo en móvil */}
+          <input
+            ref={fileInput}
+            type="file"
+            accept="video/mp4,video/quicktime,video/x-msvideo"
+            style={{ display: 'none' }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFile(f); setError(''); } e.target.value = ''; }}
+          />
+
           {!isLoading && (
             <>
-              {/* ── Modo subir ── */}
-              {mode === 'upload' && (
+              {/* ── Tabs solo en móvil ── */}
+              {isMobile && (
+                <div className="upload-tabs">
+                  <button
+                    className={`upload-tab ${mode === 'upload' ? 'active' : ''}`}
+                    onClick={() => handleModeChange('upload')}
+                  >
+                    Subir vídeo
+                  </button>
+                  <button
+                    className={`upload-tab ${mode === 'camera' ? 'active' : ''}`}
+                    onClick={() => handleModeChange('camera')}
+                  >
+                    Grabar vídeo
+                  </button>
+                </div>
+              )}
+
+              {/* ── Escritorio: solo dropzone ── */}
+              {!isMobile && (
                 <div {...getRootProps()} className={dropzoneClass}>
                   <input {...getInputProps()} />
                   <div className="dropzone-icon-wrap">
-                    {file ? '✅' : isDragActive ? '📂' : '🎥'}
+                    {file ? '✅' : isDragActive ? '📂' : '🎬'}
                   </div>
                   <p className="dropzone-title">
                     {isDragActive ? 'Suelta aquí' : file ? 'Vídeo listo' : 'Arrastra tu vídeo aquí'}
                   </p>
                   {!file && <p className="dropzone-hint">MP4 · MOV · AVI · máx. 200 MB</p>}
                   {!file && !isDragActive && (
-                    <span className="dropzone-tap-hint">📱 Toca para seleccionar desde el móvil</span>
+                    <button
+                      className="dropzone-select-btn"
+                      onClick={e => { e.stopPropagation(); }}
+                    >
+                      Seleccionar archivo
+                    </button>
                   )}
-                  {file && <p className="dropzone-hint">Toca para cambiar el vídeo</p>}
+                  {file && <p className="dropzone-hint">Haz clic para cambiar el vídeo</p>}
                 </div>
               )}
 
-              {/* ── Modo cámara ── */}
-              {mode === 'camera' && (
+              {/* ── Móvil: subir vídeo ── */}
+              {isMobile && mode === 'upload' && (
                 <div className={`camera-panel ${file ? 'has-file' : ''}`}>
                   <div className="camera-icon-wrap">
-                    {file ? '✅' : '🎬'}
+                    {file ? '✅' : '📁'}
+                  </div>
+                  <p className="camera-title">
+                    {file ? 'Vídeo seleccionado' : 'Selecciona un vídeo'}
+                  </p>
+                  <p className="camera-hint">
+                    {file
+                      ? 'Listo para analizar. Pulsa el botón de abajo.'
+                      : 'Elige un vídeo de tu galería o archivos'}
+                  </p>
+                  <button
+                    className="camera-trigger-btn"
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    {file ? 'Cambiar vídeo' : 'Seleccionar vídeo'}
+                  </button>
+                </div>
+              )}
+
+              {/* ── Móvil: grabar ── */}
+              {isMobile && mode === 'camera' && (
+                <div className={`camera-panel ${file ? 'has-file' : ''}`}>
+                  <div className="camera-icon-wrap">
+                    {file ? '✅' : '🎥'}
                   </div>
                   <p className="camera-title">
                     {file ? 'Vídeo grabado' : 'Graba tu golpe de derecha'}
@@ -213,13 +264,13 @@ export default function UploadPage({ onResults }) {
                   <p className="camera-hint">
                     {file
                       ? 'Listo para analizar. Pulsa el botón de abajo.'
-                      : 'Se abrirá la cámara de tu dispositivo directamente'}
+                      : 'Se abrirá la cámara de tu dispositivo'}
                   </p>
                   <button
                     className="camera-trigger-btn"
                     onClick={() => cameraInput.current?.click()}
                   >
-                    {file ? '🔄 Grabar de nuevo' : '📹 Abrir cámara'}
+                    {file ? 'Grabar de nuevo' : 'Abrir cámara'}
                   </button>
                 </div>
               )}

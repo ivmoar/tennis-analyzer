@@ -172,7 +172,7 @@ export default function ResultsPage({ results, isDemo, onReset }) {
                   color:      results.scoring_method === 'model' ? '#0F6E56' : '#888780',
                   border: `1px solid ${results.scoring_method === 'model' ? 'rgba(29,158,117,0.3)' : '#e5e5e3'}`,
                 }}>
-                  {results.scoring_method === 'model' ? '🌲 Random Forest' : '📏 Scoring por rangos'}
+                  {results.scoring_method === 'model' ? '✦ Modelo IA' : '◎ Análisis por rangos'}
                 </span>
               </div>
               <div style={s.statsRow}>
