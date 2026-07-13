@@ -94,14 +94,76 @@ const s = {
     alignItems: 'center',
     gap: '0.5rem',
   },
+  limitItem: {
+    display: 'flex',
+    gap: '0.65rem',
+    alignItems: 'flex-start',
+    marginBottom: '0.75rem',
+    fontSize: '0.88rem',
+    color: '#5f5e5a',
+    lineHeight: 1.6,
+  },
+  limitBullet: {
+    flexShrink: 0,
+    marginTop: '0.15em',
+    color: '#EF9F27',
+    fontWeight: '700',
+    fontSize: '1rem',
+  },
+  authorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    flexWrap: 'wrap',
+  },
+  authorAvatar: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #1D9E75 0%, #0d6e50 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '1.4rem',
+    flexShrink: 0,
+    boxShadow: '0 2px 8px rgba(29,158,117,0.3)',
+  },
+  authorInfo: {
+    flex: 1,
+  },
+  authorName: {
+    fontWeight: '700',
+    fontSize: '1rem',
+    color: '#1a1a18',
+    marginBottom: '0.2rem',
+  },
+  authorRole: {
+    fontSize: '0.82rem',
+    color: '#888780',
+    lineHeight: 1.5,
+  },
+  repoLink: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+    padding: '0.5rem 1rem',
+    background: '#1a1a18',
+    color: '#fff',
+    borderRadius: '8px',
+    fontSize: '0.82rem',
+    fontWeight: '600',
+    textDecoration: 'none',
+    flexShrink: 0,
+  },
 };
 
 const STEPS = [
-  { n: '1', title: 'Subida del vídeo', desc: 'El usuario sube un vídeo de su golpe de derecha. El sistema acepta formatos MP4, MOV y AVI de hasta 100 MB.' },
-  { n: '2', title: 'Estimación de pose', desc: 'MediaPipe Pose Landmarker detecta 33 puntos anatómicos en cada fotograma del vídeo con precisión submilimétrica.' },
-  { n: '3', title: 'Extracción de métricas', desc: 'Se calculan ángulos articulares (codo, hombro, rodilla), inclinación de tronco y separación de caderas en cada frame.' },
-  { n: '4', title: 'Puntuación técnica', desc: 'Un modelo Random Forest entrenado con golpes etiquetados por nivel técnico asigna una puntuación global al movimiento.' },
-  { n: '5', title: 'Feedback con IA', desc: 'Claude (Anthropic) genera un feedback personalizado y accionable basado en las métricas extraídas del análisis.' },
+  { n: '1', title: 'Subida del vídeo', desc: 'El usuario sube un vídeo de su golpe de derecha. El sistema acepta formatos MP4, MOV y AVI de hasta 200 MB.' },
+  { n: '2', title: 'Validación del contenido', desc: 'YOLOv8 verifica que el vídeo contiene un jugador con raqueta antes de procesarlo. Si no se detecta golpe real, se rechaza con un mensaje descriptivo.' },
+  { n: '3', title: 'Estimación de pose', desc: 'MediaPipe Pose Landmarker detecta 33 puntos anatómicos en cada fotograma del vídeo con alta precisión.' },
+  { n: '4', title: 'Extracción de métricas', desc: 'Se calculan ángulos articulares (codo, hombro, rodilla), inclinación de tronco, rotación de torso y velocidad de muñeca frame a frame. El sistema detecta automáticamente las fases del golpe (preparación, backswing, impacto y follow-through).' },
+  { n: '5', title: 'Puntuación técnica', desc: 'Un modelo Random Forest entrenado con vídeos etiquetados por nivel técnico asigna una puntuación global de 0 a 100. Cuando no hay modelo disponible, se usa un sistema de scoring por rangos biomecánicos.' },
+  { n: '6', title: 'Feedback con IA', desc: 'Claude (Anthropic) genera un resumen, una lista de aspectos a mejorar y consejos prácticos personalizados a partir de las métricas del análisis, con apoyo de un índice biomecánico de referencia (RAG).' },
 ];
 
 const TECH = [
@@ -111,6 +173,16 @@ const TECH = [
   { icon: '🤖', label: 'Claude API' },
   { icon: '⚛️', label: 'React 18' },
   { icon: '📹', label: 'OpenCV 4.9' },
+  { icon: '🎯', label: 'YOLOv8' },
+  { icon: '📚', label: 'ChromaDB (RAG)' },
+];
+
+const LIMITS = [
+  'Solo analiza el golpe de derecha. Revés, saque y volea no están soportados.',
+  'El modelo de puntuación fue entrenado con un corpus pequeño (~93 muestras). Las puntuaciones son orientativas y pueden no reflejar el nivel real en casos atípicos.',
+  'El tiempo de procesamiento depende de la resolución y duración del vídeo. Vídeos 4K pueden tardar más de un minuto en servidores de CPU compartida.',
+  'La detección de pose puede fallar si el jugador está parcialmente ocluido, hay contraluz intenso o la cámara se mueve mucho.',
+  'El feedback de Claude está generado por un modelo de lenguaje y no reemplaza la valoración de un entrenador certificado.',
 ];
 
 export default function AboutPage() {
@@ -127,8 +199,8 @@ export default function AboutPage() {
 
         <div style={s.card}>
           <p style={s.cardTitle}>Flujo de análisis</p>
-          {STEPS.map(step => (
-            <div key={step.n} style={step.n === '5' ? { ...s.step, marginBottom: 0 } : s.step}>
+          {STEPS.map((step, i) => (
+            <div key={step.n} style={i === STEPS.length - 1 ? { ...s.step, marginBottom: 0 } : s.step}>
               <div style={s.stepNum}>{step.n}</div>
               <div style={s.stepText}>
                 <p style={s.stepTitle}>{step.title}</p>
@@ -147,6 +219,38 @@ export default function AboutPage() {
                 <span>{t.label}</span>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div style={s.card}>
+          <p style={s.cardTitle}>Limitaciones conocidas</p>
+          {LIMITS.map((lim, i) => (
+            <div key={i} style={i === LIMITS.length - 1 ? { ...s.limitItem, marginBottom: 0 } : s.limitItem}>
+              <span style={s.limitBullet}>⚠</span>
+              <span>{lim}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={s.card}>
+          <p style={s.cardTitle}>Autor</p>
+          <div style={s.authorRow}>
+            <div style={s.authorAvatar}>🎓</div>
+            <div style={s.authorInfo}>
+              <p style={s.authorName}>Iván Moreno Aranda</p>
+              <p style={s.authorRole}>
+                Trabajo de Fin de Estudios · Máster en Inteligencia Artificial · UNIR, 2026<br />
+                Tutor: Alejandro
+              </p>
+            </div>
+            <a
+              href="https://github.com/ivmoar/tennis-analyzer"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={s.repoLink}
+            >
+              <span>⌥</span> GitHub
+            </a>
           </div>
         </div>
       </div>

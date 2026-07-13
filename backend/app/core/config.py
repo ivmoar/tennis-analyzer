@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     MAX_VIDEO_SIZE_MB: int = 500
     MAX_VIDEO_DURATION_SEC: int = 60
-    MIN_VIDEO_WIDTH: int = 1280
-    MIN_VIDEO_HEIGHT: int = 720
+    MIN_VIDEO_WIDTH: int = 480
+    MIN_VIDEO_HEIGHT: int = 360
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
 
     class Config:

@@ -9,13 +9,48 @@ import AdvancedAnalysisPanel from '../components/AdvancedAnalysisPanel';
 
 const s = {
   btn: {
-    padding: '0.5rem 1.25rem',
+    padding: '0.55rem 1.25rem',
     background: '#fff',
     border: '1px solid #d3d1c7',
     borderRadius: '8px',
-    fontSize: '0.9rem',
-    fontWeight: '500',
-    color: '#5f5e5a',
+    fontSize: '0.88rem',
+    fontWeight: '600',
+    color: '#3d3d3a',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.35rem',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+    transition: 'background 0.15s, border-color 0.15s',
+  },
+  btnPrimary: {
+    padding: '0.55rem 1.25rem',
+    background: 'linear-gradient(135deg, #1D9E75 0%, #0d6e50 100%)',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '0.88rem',
+    fontWeight: '700',
+    color: '#fff',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.35rem',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 2px 8px rgba(29,158,117,0.35)',
+  },
+  demoBanner: {
+    background: 'linear-gradient(135deg, #EF9F27 0%, #d4880f 100%)',
+    color: '#fff',
+    borderRadius: '10px',
+    padding: '0.6rem 1rem',
+    fontSize: '0.82rem',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    marginBottom: '1rem',
+    boxShadow: '0 2px 8px rgba(239,159,39,0.3)',
   },
   card: {
     background: '#fff',
@@ -67,7 +102,7 @@ const s = {
   },
 };
 
-export default function ResultsPage({ results, onReset }) {
+export default function ResultsPage({ results, isDemo, onReset }) {
   const videoRef    = useRef(null);
   const [currentFrame, setCurrentFrame] = useState(null);
   const [fps,          setFps]          = useState(30);
@@ -95,6 +130,14 @@ export default function ResultsPage({ results, onReset }) {
 
   return (
     <div className="page-results">
+      {isDemo && (
+        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 0 0' }}>
+          <div style={s.demoBanner} className="no-print">
+            <span>🎬</span>
+            <span>Modo demo — estos resultados son datos precalculados de ejemplo. Sube tu propio vídeo para un análisis real.</span>
+          </div>
+        </div>
+      )}
       <div className="results-header">
         <div>
           <h2 style={{ fontWeight: '700', color: '#1a1a18' }}>Resultados del análisis</h2>
@@ -103,8 +146,8 @@ export default function ResultsPage({ results, onReset }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <button style={s.btn} className="no-print" onClick={() => window.print()}>Exportar PDF</button>
-          <button style={s.btn} className="no-print" onClick={onReset}>← Nuevo análisis</button>
+          <button style={s.btn} className="no-print" onClick={() => window.print()}>📄 Exportar PDF</button>
+          <button style={s.btnPrimary} className="no-print" onClick={onReset}>⚡ Nuevo análisis</button>
         </div>
       </div>
 

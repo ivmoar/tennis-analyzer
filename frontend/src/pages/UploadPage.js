@@ -18,7 +18,7 @@ function AnalysisLoader({ uploadProgress, analysisStep }) {
       <div className="loader-header">
         <div className="loader-spinner" />
         <p className="loader-title">Analizando tu golpe…</p>
-        <p className="loader-subtitle">Este proceso tarda entre 20 y 40 segundos</p>
+        <p className="loader-subtitle">El proceso puede tardar entre 30 segundos y 2 minutos según la resolución del vídeo</p>
       </div>
 
       {ANALYSIS_STEPS.map((step, i) => {
@@ -176,7 +176,7 @@ export default function UploadPage({ onResults }) {
             ref={cameraInput}
             type="file"
             accept="video/*"
-            capture="camcorder"
+            capture="environment"
             style={{ display: 'none' }}
             onChange={handleCameraChange}
           />

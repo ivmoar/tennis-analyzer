@@ -86,7 +86,7 @@ async def analyze_video(
         await f.write(content)
 
     try:
-        # Validación de resolución mínima 720p
+        # Validación de resolución mínima
         _cap = cv2.VideoCapture(input_path)
         try:
             _width  = int(_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -98,7 +98,7 @@ async def analyze_video(
                 status_code=400,
                 detail=(
                     f"Resolución insuficiente: {_width}×{_height}. "
-                    f"Mínimo requerido: {settings.MIN_VIDEO_WIDTH}×{settings.MIN_VIDEO_HEIGHT} (720p)."
+                    f"Mínimo requerido: {settings.MIN_VIDEO_WIDTH}×{settings.MIN_VIDEO_HEIGHT}."
                 ),
             )
 
