@@ -49,12 +49,17 @@ backend/data/raw_videos/
 # Feature extraction cache (regenerable) and Apple Numbers spec files
 backend/data/labels/features_cache.json
 *.numbers
+# Labels derivadas (se regeneran con train_model.py --mode cut desde cuts.csv)
+backend/data/labels/labels.csv
+# Backups locales del dataset piloto
+backend/data/labels/_pilot_backup/
 
 # Trained model (large binary, track separately if needed)
 backend/app/models/*.joblib
 backend/app/models/*.pkl
 
 # MediaPipe model files (downloaded separately)
+*.task
 backend/*.task
 backend/app/**/*.task
 
