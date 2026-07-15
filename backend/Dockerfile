@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+# torch y torchvision CPU-only del mismo índice: evita que ultralytics arrastre
+# las ruedas CUDA (imagen ~12GB) y garantiza que el op torchvision::nms (NMS de
+# YOLO) queda registrado. Instalar torch sin torchvision rompe YOLO en runtime.
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
