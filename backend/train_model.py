@@ -46,6 +46,37 @@ CUTS_PATH         = "data/cuts/cuts.csv"
 CUTS_OUTPUT_DIR   = "data/videos"
 CUTS_SOURCE_DIR   = "data/raw_videos"
 
+# Set A: 10 características seleccionadas para reducir el sobreajuste.
+# El vector completo tiene 936 features (117 métricas x 8 estadísticos) para
+# ~130 muestras -> sobreajuste (RF MAE_cv 11.09). En el análisis exploratorio,
+# reducir a estas 10 bajó el MAE_cv a 9.49. El modelo se guarda con estos
+# nombres, y scoring_service._build_feature_vector reconstruye el vector de 10
+# automáticamente en inferencia.
+SET_A_FEATURES = [
+    "elbow_angle_mean",
+    "shoulder_angle_mean",
+    "knee_angle_mean",
+    "trunk_tilt_mean",
+    "torso_rotation_max",
+    "wrist_speed_max",
+    "shoulder_line_angle_mean",
+    "hand_to_opp_shoulder_distance_max",
+    "opp_elbow_angle_p50",
+    "foot_alignment_p75",
+]
+
+
+def _select_features(X: np.ndarray, all_names: list, subset: list) -> np.ndarray:
+    """Reduce la matriz X a las columnas de `subset`, en el orden de `subset`."""
+    missing = [n for n in subset if n not in all_names]
+    if missing:
+        raise ValueError(
+            f"Faltan features en el vector extraído: {missing}. "
+            f"¿Cambió la extracción en pose_service?"
+        )
+    idx = [all_names.index(n) for n in subset]
+    return X[:, idx]
+
 
 def cut_videos_from_csv(cuts_path: str = CUTS_PATH,
                         source_dir: str = CUTS_SOURCE_DIR,
@@ -270,6 +301,11 @@ def train(labels_path: str):
               f"Necesitas al menos 5 para entrenar (recomendado: 30+)")
         sys.exit(1)
 
+    # Reducir al Set A (10 features) para evitar el sobreajuste de las 936.
+    full_names = _get_feature_names(cache)
+    X = _select_features(X, full_names, SET_A_FEATURES)
+    print(f"\nFeatures: reducidas de {len(full_names)} a {X.shape[1]} (Set A)")
+
     print(f"\nDataset: {len(X)} muestras etiquetadas")
     print(f"Puntuación media: {y.mean():.1f} | Desv. típica: {y.std():.1f}")
     print(f"Rango: {y.min():.0f} - {y.max():.0f}")
@@ -287,7 +323,7 @@ def train(labels_path: str):
         random_state=42,
     )
 
-    feature_names = _get_feature_names(cache)
+    feature_names = SET_A_FEATURES
 
     # Validación cruzada comparativa (5-fold, MAE)
     results = {}
@@ -344,6 +380,7 @@ def evaluate(labels_path: str):
 
     payload = joblib.load(MODEL_OUTPUT_PATH)
     model = payload["model"] if isinstance(payload, dict) else payload
+    model_names = payload.get("feature_names") if isinstance(payload, dict) else None
     with open(FEATURES_PATH) as f:
         cache = json.load(f)
 
@@ -352,6 +389,10 @@ def evaluate(labels_path: str):
     if len(X) == 0:
         print("No hay muestras etiquetadas para evaluar")
         sys.exit(1)
+
+    # Reducir X a las features con las que se entrenó el modelo (Set A).
+    if model_names:
+        X = _select_features(X, _get_feature_names(cache), model_names)
 
     y_pred = model.predict(X)
     mae    = mean_absolute_error(y, y_pred)

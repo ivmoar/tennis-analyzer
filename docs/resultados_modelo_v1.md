@@ -1,8 +1,14 @@
-# Resultados del modelo de puntuación — iteración v1 (dataset piloto)
+# Resultados del modelo de puntuación
 
 > Material para la memoria del TFE. Modelo de regresión que predice una
 > puntuación técnica (0–100) del golpe de derecha a partir de características
 > biomecánicas extraídas con visión por computador.
+>
+> **Este documento recoge dos iteraciones.** Las secciones 1–8 describen la
+> **iteración v1** (dataset piloto, 93 muestras, modelo *no* desplegado). La
+> **sección 9** documenta la **iteración v2** (dataset ampliado a 135 muestras,
+> modelo **desplegado en producción** el 15/07/2026) e introduce una corrección
+> metodológica importante en la validación cruzada (GroupKFold).
 
 ## 1. Descripción del dataset
 
@@ -224,11 +230,13 @@ posible extensión futura (bastaría con discretizar la puntuación en categorí
 entrenar sobre las mismas características), pendiente de definir los umbrales de
 las categorías.
 
-## 8. Estado del sistema desplegado
+## 8. Estado del sistema desplegado (durante la iteración v1)
 
-Independientemente del modelo (que aún **no** está en producción; el scoring
-funciona por reglas), el sistema desplegado en `https://ivanmorenoaranda.com/TFM`
-incorpora en esta fase:
+> En la iteración v1 el modelo **no** estaba en producción (el scoring funcionaba
+> por reglas). Esto cambió en la iteración v2 (sección 9.6). El resto de esta
+> sección describe los componentes que ya estaban desplegados en v1.
+
+El sistema desplegado en `https://ivanmorenoaranda.com/TFM` incorpora:
 
 - **Feedback fundamentado (RAG).** El texto se genera con un LLM sobre contexto
   biomecánico recuperado de una base de conocimiento (ChromaDB), basada en
@@ -236,3 +244,141 @@ incorpora en esta fase:
 - **Validación de contenido (YOLOv8).** Antes de puntuar se verifica que el
   vídeo contiene un golpe real: cuerpo visible, raqueta y pelota detectadas y
   proximidad raqueta-pelota en la ventana de impacto.
+
+---
+
+## 9. Iteración v2 — dataset ampliado y modelo desplegado
+
+Segunda iteración (15/07/2026): se amplía el dataset, se conserva la selección
+de 10 características (Set A) y se **despliega el modelo en producción**. Además
+se corrige la metodología de validación cruzada, lo que revela una estimación
+del error más honesta que la de v1.
+
+### 9.1 Dataset ampliado
+
+| Concepto | v1 (piloto) | **v2** |
+|---|---|---|
+| Cortes grabados | 95 | 136 |
+| Cortes **usables** (pose detectada) | 93 | **135** |
+| Descartados | 2 | 1 (`VIDEO-…-32-57__0-03_0-05`, sin pose fiable) |
+| Vídeos fuente | 15 | **18** |
+| Puntuación media / desv. típica | 68,5 / 16,8 | **74,2 / 19,6** |
+| Rango observado | 20 – 98 | **15 – 100** |
+
+Los cortes nuevos amplían deliberadamente los **extremos de la escala** (se
+añaden golpes de jugadores profesionales, puntuados 93–100, y varios golpes
+deficientes por debajo de 40), atendiendo a la recomendación de la sección 6.2.
+El etiquetado sigue siendo de **un único anotador** (misma limitación de validez
+que en v1, sección 1.2).
+
+### 9.2 Corrección metodológica: validación cruzada por grupos
+
+En v1 la validación cruzada 5-fold repartía los cortes **sin tener en cuenta su
+vídeo de origen**. Como de un mismo vídeo fuente se extraen varios cortes
+(golpes de la misma sesión, jugador, cámara e iluminación), esto permite que
+clips muy parecidos caigan a la vez en entrenamiento y test → **fuga de
+información** y una estimación del error **optimista**.
+
+La validación correcta para esta estructura de datos es **GroupKFold agrupando
+por vídeo fuente**: todos los cortes de un mismo vídeo permanecen juntos en la
+misma partición. Así se mide lo que realmente importa: la capacidad de
+generalizar a **una grabación nueva no vista**.
+
+La Tabla 6 muestra el mismo modelo (Random Forest, 10 características, 135
+muestras) bajo los tres esquemas, para dejar explícito el efecto:
+
+#### Tabla 6 — Efecto del esquema de validación (Random Forest, Set A, n=135)
+
+| Esquema de CV (5-fold) | MAE | RMSE | R² | Interpretación |
+|---|---|---|---|---|
+| KFold barajado | 9,53 | 13,77 | +0,505 | **Optimista** (fuga: cortes del mismo vídeo en train y test) |
+| KFold sin barajar | 10,22 | — | — | Intermedio (el que reporta `train_model.py` por defecto) |
+| **GroupKFold por vídeo fuente** | **11,73 ± 2,31** | **15,84** | **−0,017** | **Honesto** (generalizar a una grabación nueva) |
+
+> **Lectura.** La estimación honesta del error (GroupKFold) es **MAE ≈ 11,7
+> puntos**, notablemente peor que la de v1 (9,49). No es un empeoramiento del
+> modelo, sino una **medición más rigurosa**: el 9,49 de v1 —calculado sin
+> agrupar— estaba inflado por la misma fuga. El R² medio por fold es ≈ 0: al
+> enfrentarse a un vídeo completamente nuevo, el modelo apenas supera a predecir
+> la media dentro de ese vídeo. Con solo 18 vídeos fuente y un único anotador,
+> es el resultado esperable de una **prueba de concepto**.
+
+### 9.3 Comparativa de configuraciones (GroupKFold, n=135)
+
+#### Tabla 7 — MAE por modelo y configuración (GroupKFold 5-fold, honesto)
+
+| Configuración | Modelo | MAE | Baseline |
+|---|---|---|---|
+| 10 características (Set A) | **Random Forest** | **11,73** | 16,09 |
+| 10 características (Set A) | XGBoost | 11,81 | 16,09 |
+
+Aun con la validación honesta, el Random Forest **reduce el MAE ~27 % sobre el
+baseline** (predecir la media, 16,09), lo que confirma que sigue habiendo señal
+aprendible. Se conserva el Random Forest como modelo de producción.
+
+### 9.4 Errores mayores (out-of-fold, GroupKFold)
+
+El patrón de **regresión hacia la media** de v1 se mantiene: el modelo
+sobreestima los golpes malos y subestima los excelentes. Los mayores errores se
+concentran en los extremos recién añadidos:
+
+| Vídeo (corte) | Real | Predicho | Error |
+|---|---|---|---|
+| Sinner (0:54) | 15 | 77,0 | +62,0 |
+| IMG_2663 (0:14) | 29 | 78,1 | +49,1 |
+| Sinner (1:54) | 45 | 86,1 | +41,1 |
+| IMG_2675 (0:20) | 30 | 70,8 | +40,8 |
+| IMG_2656 (0:11) | 30 | 68,1 | +38,1 |
+
+Los golpes profesionales de puntuación deliberadamente baja (un *slice* defensivo
+de Sinner puntuado 15) son los peor predichos: el modelo, entrenado
+mayoritariamente con derechas de amateur de gama media, no reconoce la mecánica
+atípica y regresa hacia la media.
+
+### 9.5 Importancia de características (Random Forest, Set A, n=135)
+
+| # | Característica | Importancia |
+|---|---|---|
+| 1 | wrist_speed_max | 0,397 |
+| 2 | opp_elbow_angle_p50 | 0,149 |
+| 3 | hand_to_opp_shoulder_distance_max | 0,149 |
+| 4 | shoulder_line_angle_mean | 0,076 |
+| 5 | knee_angle_mean | 0,059 |
+| 6 | foot_alignment_p75 | 0,051 |
+| 7 | torso_rotation_max | 0,037 |
+| 8 | trunk_tilt_mean | 0,030 |
+| 9 | shoulder_angle_mean | 0,028 |
+| 10 | elbow_angle_mean | 0,024 |
+
+Con más datos, la **velocidad máxima de muñeca** (`wrist_speed_max`, proxy de
+potencia) pasa a dominar la decisión (importancia 0,40), coherente con la
+intuición biomecánica de que la velocidad de la cabeza de la raqueta es un
+determinante central de la calidad del golpe.
+
+### 9.6 Despliegue en producción
+
+El Random Forest v2 se despliega en `https://ivanmorenoaranda.com/TFM`,
+sustituyendo al scoring por reglas. A partir de esta iteración la interfaz
+muestra el distintivo «✦ Modelo IA» y la API devuelve `scoring_method="model"`.
+
+Nota de arquitectura: el directorio del modelo se monta como **volumen** desde
+el host (`./backend/app/models:/app/app/models`), de modo que el modelo queda
+**desacoplado del build** de la imagen Docker. Esto permite actualizarlo sin
+reconstruir la imagen y evita que una reconstrucción lo elimine (el `.dockerignore`
+excluye los `*.joblib` por peso).
+
+### 9.7 Reproducibilidad
+
+- Definición de cortes: `backend/data/cuts/cuts.csv` (136 cortes: vídeo, inicio,
+  fin, score, notas).
+- Pipeline: `python train_model.py --mode cut` (recorta con ffmpeg) →
+  `--mode label` (extrae características con MediaPipe, cachea en
+  `features_cache.json`) → `--mode train` (reduce al Set A y entrena RF/XGB).
+- Selección Set A codificada en `train_model.py` (`SET_A_FEATURES`); el modelo se
+  guarda con esos 10 nombres y `scoring_service` reconstruye el vector en
+  inferencia.
+
+> **Recomendación pendiente.** `train_model.py --mode train` reporta el MAE con
+> KFold sin agrupar (10,22). Convendría migrar su validación interna a
+> **GroupKFold por vídeo fuente** para que la métrica impresa coincida con la
+> estimación honesta (11,73) de este documento.

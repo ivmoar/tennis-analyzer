@@ -4,12 +4,16 @@ services:
     env_file: ./backend/.env
     volumes:
       - uploads:/app/uploads
+      # Modelo entrenado montado desde el host (rsync lo mantiene actualizado).
+      # Desacopla el modelo del build: un rebuild ya no lo pierde (.dockerignore
+      # excluye *.joblib), y se puede actualizar sin reconstruir la imagen.
+      - ./backend/app/models:/app/app/models
     restart: unless-stopped
 
   frontend:
     build: ./frontend
     ports:
-      - "3001:80"
+      - "127.0.0.1:3001:80"
     depends_on:
       - backend
     restart: unless-stopped
