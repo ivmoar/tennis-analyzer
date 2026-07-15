@@ -307,14 +307,20 @@ muestras) bajo los tres esquemas, para dejar explícito el efecto:
 
 #### Tabla 7 — MAE por modelo y configuración (GroupKFold 5-fold, honesto)
 
-| Configuración | Modelo | MAE | Baseline |
-|---|---|---|---|
-| 10 características (Set A) | **Random Forest** | **11,73** | 16,09 |
-| 10 características (Set A) | XGBoost | 11,81 | 16,09 |
+| Configuración | Modelo | MAE | RMSE | R² | Baseline MAE |
+|---|---|---|---|---|---|
+| 10 características (Set A) | **Random Forest** | **11,73** | 15,84 | −0,017 | 16,09 |
+| 10 características (Set A) | XGBoost | 14,50 | 18,37 | −0,442 | 16,09 |
 
 Aun con la validación honesta, el Random Forest **reduce el MAE ~27 % sobre el
 baseline** (predecir la media, 16,09), lo que confirma que sigue habiendo señal
-aprendible. Se conserva el Random Forest como modelo de producción.
+aprendible. XGBoost, en cambio, se degrada por debajo del baseline bajo
+GroupKFold (MAE 14,50, R² −0,44): con pocos vídeos fuente sobreajusta más que el
+Random Forest. Se conserva el **Random Forest** como modelo de producción.
+
+> `train_model.py --mode train` reporta ahora exactamente estas cifras (la CV
+> interna usa GroupKFold por vídeo fuente), de modo que la métrica del código y
+> la de este documento coinciden.
 
 ### 9.4 Errores mayores (out-of-fold, GroupKFold)
 
@@ -378,7 +384,7 @@ excluye los `*.joblib` por peso).
   guarda con esos 10 nombres y `scoring_service` reconstruye el vector en
   inferencia.
 
-> **Recomendación pendiente.** `train_model.py --mode train` reporta el MAE con
-> KFold sin agrupar (10,22). Convendría migrar su validación interna a
-> **GroupKFold por vídeo fuente** para que la métrica impresa coincida con la
-> estimación honesta (11,73) de este documento.
+> **Validación honesta en el código.** La validación cruzada interna de
+> `train_model.py --mode train` usa **GroupKFold por vídeo fuente**, de modo que
+> la métrica que imprime (MAE 11,73) coincide con la estimación honesta de este
+> documento y no con el valor optimista por fuga.

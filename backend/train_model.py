@@ -31,7 +31,7 @@ import subprocess
 import numpy as np
 import joblib
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import cross_val_score, train_test_split, GroupKFold
 from sklearn.metrics import mean_absolute_error, r2_score
 from xgboost import XGBRegressor
 
@@ -76,6 +76,17 @@ def _select_features(X: np.ndarray, all_names: list, subset: list) -> np.ndarray
         )
     idx = [all_names.index(n) for n in subset]
     return X[:, idx]
+
+
+def _source_groups(names: list) -> np.ndarray:
+    """
+    Deriva el vídeo fuente de cada corte a partir de su nombre de fichero
+    (`IMG_2675__0-20_0-22.mp4` -> `IMG_2675`). Se usa para GroupKFold, de modo
+    que todos los cortes de un mismo vídeo caigan en la misma partición y la
+    validación cruzada mida la generalización a una grabación nueva (sin fuga
+    de información entre cortes de la misma sesión).
+    """
+    return np.array([os.path.splitext(n)[0].split("__")[0] for n in names])
 
 
 def cut_videos_from_csv(cuts_path: str = CUTS_PATH,
@@ -325,24 +336,48 @@ def train(labels_path: str):
 
     feature_names = SET_A_FEATURES
 
-    # Validación cruzada comparativa (5-fold, MAE)
+    # Validación cruzada por grupos (GroupKFold agrupando por vídeo fuente).
+    # Es la estimación honesta: ningún corte de un vídeo aparece a la vez en
+    # entrenamiento y test, así que mide la generalización a una grabación nueva.
+    # (Un KFold normal daría un MAE optimista por fuga entre cortes de la misma
+    # sesión.)
+    groups = _source_groups(names)
+    n_groups = len(set(groups))
+    n_splits = min(5, n_groups)
+    print(f"\nCV: GroupKFold por vídeo fuente "
+          f"({n_groups} vídeos, {n_splits} particiones)")
+
     results = {}
     for name, m in [("RandomForest", rf_model), ("XGBoost", xgb_model)]:
-        if len(X) >= 10:
-            cv = cross_val_score(m, X, y, cv=5, scoring="neg_mean_absolute_error")
-            results[name] = {"mae": -cv.mean(), "std": cv.std(), "model": m}
+        if n_groups >= 2:
+            gkf = GroupKFold(n_splits=n_splits)
+            mae = -cross_val_score(m, X, y, cv=gkf, groups=groups,
+                                   scoring="neg_mean_absolute_error")
+            rmse = -cross_val_score(m, X, y, cv=gkf, groups=groups,
+                                    scoring="neg_root_mean_squared_error")
+            r2 = cross_val_score(m, X, y, cv=gkf, groups=groups, scoring="r2")
+            results[name] = {"mae": mae.mean(), "std": mae.std(),
+                             "rmse": rmse.mean(), "r2": r2.mean(), "model": m}
         else:
-            results[name] = {"mae": float("inf"), "std": 0.0, "model": m}
+            results[name] = {"mae": float("inf"), "std": 0.0,
+                             "rmse": float("inf"), "r2": float("-inf"), "model": m}
 
-    print(f"\n{'Modelo':<15} {'MAE_cv':>8} {'Std':>8}")
-    print("-" * 35)
+    # Baseline: predecir siempre la media (referencia de "no aprender nada").
+    baseline_mae = float(np.abs(y - y.mean()).mean())
+
+    print(f"\n{'Modelo':<15} {'MAE':>8} {'Std':>8} {'RMSE':>8} {'R2':>8}")
+    print("-" * 51)
     for name, r in results.items():
-        print(f"{name:<15} {r['mae']:>8.2f} {r['std']:>8.2f}")
+        print(f"{name:<15} {r['mae']:>8.2f} {r['std']:>8.2f} "
+              f"{r['rmse']:>8.2f} {r['r2']:>+8.3f}")
+    print(f"{'Baseline(media)':<15} {baseline_mae:>8.2f}")
 
     # Elegir el modelo con menor MAE
     best_name = min(results, key=lambda k: results[k]["mae"])
     best_model = results[best_name]["model"]
-    print(f"\nMejor modelo: {best_name} (MAE={results[best_name]['mae']:.2f})")
+    print(f"\nMejor modelo: {best_name} "
+          f"(MAE={results[best_name]['mae']:.2f}, "
+          f"R2={results[best_name]['r2']:+.3f})")
 
     # Entrenar ambos con todos los datos
     rf_model.fit(X, y)
